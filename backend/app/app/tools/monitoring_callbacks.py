@@ -11,6 +11,7 @@ from app.schemas.commonData import PlmnId
 from app.schemas.monitoringevent import (
     GeographicalCoordinates,
     LocationInfo,
+    LocationType,
     MonitoringEventReport,
     MonitoringNotification,
     MonitoringType,
@@ -47,7 +48,7 @@ async def handle_location_report_callback(location_reporting_sub, ue: UE, doc_id
 
     notification = MonitoringNotification(
         subscription=location_reporting_sub.get("self"),
-        monitoringEventReports=[create_location_event_report(ue)],
+        monitoringEventReports=[create_location_event_report(ue, location_reporting_sub.get("locationType"))],
     )
 
     try:
@@ -59,11 +60,24 @@ async def handle_location_report_callback(location_reporting_sub, ue: UE, doc_id
         raise ex
 
 
-def create_location_event_report(ue: UE) -> MonitoringEventReport:
+def create_location_event_report(ue: UE, locationType: Optional[LocationType] = LocationType.CURRENT_LOCATION) -> MonitoringEventReport:
+    if locationType == LocationType.CURRENT_LOCATION:
+        cellid = ue.Cell_id if ue.Cell_id is not None else None
+    elif locationType == LocationType.LAST_KNOWN_LOCATION:
+        cellid = ue.last_known_cell_id
+    elif locationType == LocationType.INITIAL_LOCATION:
+        cellid = ue.initial_cell_id
+    elif locationType == LocationType.CURRENT_OR_LAST_KNOWN_LOCATION:
+        cellid = ue.Cell_id if ue.Cell_id is not None else ue.last_known_cell_id
+
+    cell = None
+    with db_context() as db:
+        cell = crud.cell.get_Cell_id_by_id(db=db, id=cellid)
     report = MonitoringEventReport(
         externalId=ue.external_identifier,
         monitoringType=MonitoringType.LOCATION_REPORTING,
         locationInfo=LocationInfo(
+            cellId=cell.cell_id if cell is not None else None,
             geographicArea=Point(
                 shape=SupportedGADShapes.POINT,
                 point=GeographicalCoordinates(

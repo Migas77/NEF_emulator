@@ -121,10 +121,28 @@ async def update_ue(
 
     old_cell = ue.Cell.cell_id if ue.Cell is not None else None
     new_cell = cell_now.cell_id if cell_now is not None else None
-
     new_cell_id = cell_now.id if cell_now is not None else None
+
+    # Initial cell id is only set in the beginning of the movement
+    if ue.initial_cell_id is None:
+        ue.initial_cell_id = new_cell_id
+        crud.ue.update(
+            db=db,
+            db_obj=ue,
+            obj_in={"initial_cell_id": ue.initial_cell_id},
+        )
+
+    # Update cell_id if changed
     if ue.Cell_id != new_cell_id:
         ue.Cell_id = new_cell_id
+        if new_cell_id is not None:
+            ue.last_known_cell_id = new_cell_id
+            crud.ue.update(
+            db=db,
+            db_obj=ue,
+            obj_in={"last_known_cell_id": ue.last_known_cell_id},
+        )
+
         ue.Cell = cell_now
 
         crud.ue.update(
@@ -135,6 +153,10 @@ async def update_ue(
 
         if cell_now:
             handovers[ue.supi].append(cell_now.id)
+    
+    print("Initial Cell ID:", ue.initial_cell_id)
+    print("Cell ID:", ue.Cell_id)
+    print("LK Cell ID:", ue.last_known_cell_id)
 
     return ue, old_cell, new_cell
 
@@ -245,6 +267,14 @@ def terminate_movement(
     """
     try:
         moving_devices.pop(msg.supi)
+        with db_context() as db:
+            ue = crud.ue.get_supi(db, supi=msg.supi)
+            ue.initial_cell_id = None
+            crud.ue.update(
+                db=db,
+                db_obj=ue,
+                obj_in={"initial_cell_id": None},
+            )
         return {"msg": "Loop ended"}
     except KeyError as ke:
         logging.warning("Key Not Found in Moving Devices Dictionary:", ke)

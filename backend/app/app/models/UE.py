@@ -33,6 +33,8 @@ class UE(Base):
     longitude = Column(Float, index=True)
     path_id = Column(Integer, index=True)
     visiting_plmnid = Column(String, nullable=True, default=None)
+    last_known_cell_id = Column(Integer, index=True, nullable=True, default=None)
+    initial_cell_id = Column(Integer, index=True, nullable=True, default=None)
 
     # Foreign Keys
     owner_id = Column(Integer, ForeignKey("user.id"))

@@ -216,7 +216,10 @@ async def create_subscription(
 
         for monType in allMonitoringTypes:
             if monType == MonitoringType.LOCATION_REPORTING:
-                reports.append(create_location_event_report(ue))
+                if item_in.locationType is None:
+                    reports.append(create_location_event_report(ue))
+                else:
+                    reports.append(create_location_event_report(ue, item_in.locationType))
             elif monType == MonitoringType.UE_REACHABILITY and ue.Cell_id is not None:
                 assert item_in.reachabilityType is not None
                 reports.append(

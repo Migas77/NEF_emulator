@@ -33,6 +33,9 @@ class CRUD_Cell(CRUDBase[Cell, CellCreate, CellUpdate]):
 
     def get_Cell_id(self, db: Session, id: str) -> Cell:
         return db.query(self.model).filter(self.model.cell_id == id).first()
+    
+    def get_Cell_id_by_id(self, db: Session, id: int) -> Cell:
+        return db.query(self.model).filter(self.model.id == id).first()
 
     def get_by_gNB_id(
         self, db: Session, *, gNB_id: int
