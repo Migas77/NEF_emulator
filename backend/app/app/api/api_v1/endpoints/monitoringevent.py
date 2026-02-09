@@ -26,6 +26,7 @@ from app.crud import user
 from app.db.session import client
 from app.schemas.commonData import Link
 from app.schemas.monitoringevent import (
+    LocationType,
     MonitoringEventReports,
     MonitoringType,
 )
@@ -209,6 +210,14 @@ async def create_subscription(
             status_code=400,
             detail="The request must contain either a maximumNumberOfReports or a monitorExpireTime",
         )
+    
+    # TS129.122 - 5.3.2.4.5 Enumeration: LocationType
+    if item_in.maximumNumberOfReports > 1 and item_in.locationType == LocationType.LAST_KNOWN_LOCATION:
+        http_response = JSONResponse(
+            status_code=400,
+            content="The LocationType LAST_KNOWN_LOCATION is only allowed for One-time requests."
+        )
+        return http_response
 
     # One time request
     if item_in.maximumNumberOfReports == 1:

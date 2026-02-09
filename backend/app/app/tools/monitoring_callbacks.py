@@ -62,7 +62,7 @@ async def handle_location_report_callback(location_reporting_sub, ue: UE, doc_id
 
 def create_location_event_report(ue: UE, locationType: Optional[LocationType] = LocationType.CURRENT_LOCATION) -> MonitoringEventReport:
     if locationType == LocationType.CURRENT_LOCATION:
-        cellid = ue.Cell_id if ue.Cell_id is not None else None
+        cellid = ue.Cell_id
     elif locationType == LocationType.LAST_KNOWN_LOCATION:
         cellid = ue.last_known_cell_id
     elif locationType == LocationType.INITIAL_LOCATION:
@@ -72,7 +72,9 @@ def create_location_event_report(ue: UE, locationType: Optional[LocationType] = 
 
     cell = None
     with db_context() as db:
-        cell = crud.cell.get_Cell_id_by_id(db=db, id=cellid)
+        if cellid is not None:
+            cell = crud.cell.get_Cell_id_by_id(db=db, id=cellid)
+
     report = MonitoringEventReport(
         externalId=ue.external_identifier,
         monitoringType=MonitoringType.LOCATION_REPORTING,
@@ -88,8 +90,8 @@ def create_location_event_report(ue: UE, locationType: Optional[LocationType] = 
         ),
     )
 
-    if ue.Cell_id is not None and report.locationInfo is not None:
-        report.locationInfo.cellId = ue.Cell.cell_id
+    if cell is not None and report.locationInfo is not None:
+        report.locationInfo.cellId = cell.cell_id
 
     return report
 
