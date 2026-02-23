@@ -106,7 +106,6 @@ def create_UE(
 
     UE = crud.ue.create_with_owner(db=db, obj_in=json_data, owner_id=current_user.id)
     json_data.update({"path_id": 0})
-    print("latitude:", UE.latitude, "longitude:", UE.longitude)
 
     return json_data
 
