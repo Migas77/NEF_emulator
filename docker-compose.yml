@@ -4,8 +4,6 @@ services:
 
   db:
     image: postgres:12
-    ports:
-    - "5432:5432"
     command: -c shared_buffers=256MB -c max_connections=200
     profiles: ["debug", "dev"]
     volumes:
@@ -29,8 +27,6 @@ services:
 
   mongo:
     image: mongo:4.4.10
-    ports:
-      - 27017:27017
     profiles: ["debug", "dev"]
     volumes:
       - app-mongo-db-data:/data/db
