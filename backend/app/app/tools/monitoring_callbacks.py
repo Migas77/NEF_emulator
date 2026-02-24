@@ -61,9 +61,10 @@ async def handle_location_report_callback(location_reporting_sub, ue: UE, doc_id
 
 
 def create_location_event_report(ue: UE, locationType: Optional[LocationType] = LocationType.CURRENT_LOCATION) -> MonitoringEventReport:
-    if locationType == LocationType.CURRENT_LOCATION:
-        cellid = ue.Cell_id
-    elif locationType == LocationType.LAST_KNOWN_LOCATION:
+    cellid = ue.Cell_id
+    #if locationType == LocationType.CURRENT_LOCATION:
+    #    cellid = ue.Cell_id
+    if locationType == LocationType.LAST_KNOWN_LOCATION:
         cellid = ue.last_known_cell_id
     elif locationType == LocationType.INITIAL_LOCATION:
         cellid = ue.initial_cell_id
