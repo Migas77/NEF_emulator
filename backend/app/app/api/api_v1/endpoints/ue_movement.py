@@ -121,21 +121,25 @@ async def update_ue(
 
     old_cell = ue.Cell.cell_id if ue.Cell is not None else None
     new_cell = cell_now.cell_id if cell_now is not None else None
-
     new_cell_id = cell_now.id if cell_now is not None else None
+
+    # In case the UE gets step to a point in a path where is not covered by any cell, we set the initial_cell_id to the first cell it connects to again
+    if ue.initial_cell_id is None:
+        crud.ue.update(db=db, db_obj=ue, obj_in={"initial_cell_id": new_cell_id})
+
+    # Update cell_id if changed
     if ue.Cell_id != new_cell_id:
         ue.Cell_id = new_cell_id
+        if new_cell_id is not None:
+            crud.ue.update(db=db, db_obj=ue, obj_in={"last_known_cell_id": ue.Cell_id})
+
         ue.Cell = cell_now
 
-        crud.ue.update(
-            db=db,
-            db_obj=ue,
-            obj_in={"Cell_id": ue.Cell_id},
-        )
+        crud.ue.update(db=db, db_obj=ue, obj_in={"Cell_id": ue.Cell_id})
 
         if cell_now:
             handovers[ue.supi].append(cell_now.id)
-
+            
     return ue, old_cell, new_cell
 
 

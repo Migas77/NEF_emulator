@@ -16,6 +16,7 @@ from app.tools.monitoring_callbacks import (
     get_subscription_mon_types,
     send_roaming_status_callback,
 )
+from app.tools.distance import check_distance
 
 # from app.api.api_v1.endpoints.ue_movement import retrieve_ue, retrieve_ue_distances, retrieve_ue_path_losses, retrieve_ue_rsrps, retrieve_ue_handovers
 from .utils import ReportLogging
@@ -101,6 +102,7 @@ def create_UE(
     json_data["ip_address_v4"] = str(item_in.ip_address_v4)
     json_data["ip_address_v6"] = str(item_in.ip_address_v6.exploded)
     json_data["Cell_id"] = None
+
 
     UE = crud.ue.create_with_owner(db=db, obj_in=json_data, owner_id=current_user.id)
     json_data.update({"path_id": 0})
@@ -380,5 +382,9 @@ def assign_predefined_path(
         json_data["latitude"] = random_point.get("latitude")
         json_data["longitude"] = random_point.get("longitude")
         crud.ue.update(db=db, db_obj=UE, obj_in=json_data)
-
+        if UE.initial_cell_id is None:
+            cell_now, _ = check_distance(json_data["latitude"], json_data["longitude"], crud.cell.get_multi_by_owner(db=db, owner_id=current_user.id))
+            if cell_now is not None:
+                new_cell = cell_now.id
+                crud.ue.update(db=db, db_obj=UE, obj_in={"initial_cell_id": new_cell})
     return item_in

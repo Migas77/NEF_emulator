@@ -91,6 +91,8 @@ class UE(UEBase):
     path_id: Optional[int]
     gNB_id: Optional[int]
     Cell_id: Optional[int]
+    Last_known_cell_id: Optional[int]
+    Initial_cell_id: Optional[int]
 
     class Config:
         orm_mode = True
