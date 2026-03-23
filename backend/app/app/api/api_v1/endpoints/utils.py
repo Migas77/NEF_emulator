@@ -58,6 +58,8 @@ def add_notifications(
         serviceAPI = "Reporting Network Status API"
     elif endpoint.find('cp-parameter-provisioning') != -1:
         serviceAPI = "Cp Parameter Provisioning API"
+    elif endpoint.find('analyticsexposure') != -1:
+        serviceAPI = "Analytics Exposure API"
 
     #Request body check and trim
     if(request.method == 'POST') or (request.method == 'PUT'):  

@@ -37,10 +37,16 @@ Msisdn: TypeAlias = Annotated[
 # TypeAllocationCode
 # ApplicationId - str = Field(None, description="String providing an application identifier.")
 # Float - float
-# SamplingRatio - int = Field(None, description="Expressed in percent.", ge=1, le=100)
 # PacketLossRate - int = Field(None, description="Expressed in tenth of percent.", ge=0, le=1000)
 # GlobalRanNodeId
 # Tai
+SamplingRatio: TypeAlias = Annotated[
+    int,
+    Field(
+        ge=1, le=100,
+        description='Unsigned integer indicating Sampling Ratio (see clauses 4.15.1 of 3GPP TS 23.502), expressed in percent.'
+    ),
+]
 EutraCellId: TypeAlias = Annotated[
     str,
     Field(

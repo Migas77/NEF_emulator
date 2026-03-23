@@ -17,7 +17,7 @@ from .commonData import (
     AnalyticsSubset,
     PartitioningCriteria,
     NotificationFlag,
-    WebsockNotifConfig,
+    WebsockNotifConfig, SamplingRatio,
 )
 from .cpParameterProvisioning import ScheduledCommunicationTime
 from .utils import ExtraBaseModel
@@ -466,11 +466,15 @@ class PerfData(ExtraBaseModel):
 
     avgTrafficRate: constr(regex=r"^\d+(\.\d+)? (bps|Kbps|Mbps|Gbps|Tbps)$")
     maxTrafficRate: constr(regex=r"^\d+(\.\d+)? (bps|Kbps|Mbps|Gbps|Tbps)$")
-    avePacketDelay: int = Field(None, description="Expressed in milliseconds.", ge=1)
-    maxPacketDelay: int = Field(None, description="Expressed in milliseconds.", ge=1)
-    avgPacketLossRate: int = Field(
-        None, description="Expressed in tenth of percent.", ge=0, le=1000
-    )
+    minTrafficRate: constr(regex=r"^\d+(\.\d+)? (bps|Kbps|Mbps|Gbps|Tbps)$")
+    # aggTrafficRate: constr(regex=r"^\d+(\.\d+)? (bps|Kbps|Mbps|Gbps|Tbps)$")
+    varTrafficRate: float
+
+    # avePacketDelay: int = Field(None, description="Expressed in milliseconds.", ge=1)
+    # maxPacketDelay: int = Field(None, description="Expressed in milliseconds.", ge=1)
+    # avgPacketLossRate: int = Field(
+    #     None, description="Expressed in tenth of percent.", ge=0, le=1000
+    # )
 
 
 class DnPerf(ExtraBaseModel):
@@ -673,6 +677,11 @@ class AnalyticsEvent(str, Enum):
     dispersion = "DISPERSION"
     dnPerformance = "DN_PERFORMANCE"
     serviceExperience = "SERVICE_EXPERIENCE"
+    e2eDataVolTransTime = "E2E_DATA_VOL_TRANS_TIME"
+    movementBehavior = "MOVEMENT_BEHAVIOUR"
+    relativeProximity = "RELATIVE_PROXIMITY"
+    wlanPerformance = "WLAN_PERFORMANCE"
+    nsLoadLevel = "NS_LOAD_LEVEL"
 
 
 class GeographicalArea(ExtraBaseModel):
@@ -893,6 +902,32 @@ class UeLocationInfo(ExtraBaseModel):
     confidence: int = Field(None, description="", ge=0)
 
 
+class E2eDataVolTransTimeCriterion(str, Enum):
+    """Represents the ordering criterion for the list of E2E data volume transfer time."""
+
+    e2eDataVolTransTime = "E2E_DATA_VOL_TRANS_TIME"
+
+
+class DataVolume:
+    """Data Volume including UL/DL."""
+
+    uplinkVolume: Optional[int] = Field(None, description="", ge=0)
+    downlinkVolume: Optional[int] = Field(None, description="", ge=0)
+
+
+class E2eDataVolTransTimeReq(ExtraBaseModel):
+    """Represents other E2E data volume transfer time analytics requirements."""
+
+    criterion: Optional[E2eDataVolTransTimeCriterion] = Field(None, description="")
+    order: Optional[MatchingDirection] = Field(None, description="")
+    highTransTmThr: Optional[int] = Field(None, description="", ge=0)
+    lowTransTmThr: Optional[int] = Field(None, description="", ge=0)
+    repeatDataTrans: Optional[int] = Field(None, description="", ge=0)
+    tsIntervalDataTrans: Optional[int] = Field(None, description="", ge=0)
+    dataVolume: Optional[DataVolume] = Field(None, description="")
+    maxNumberUes: Optional[int] = Field(None, description="", ge=0)
+
+
 class AnalyticsEventFilterSubsc(ExtraBaseModel):
     """Represents an analytics event filter."""
 
@@ -905,11 +940,17 @@ class AnalyticsEventFilterSubsc(ExtraBaseModel):
         "province1.mnc01.mcc202.gprs",
         description="String identifying the Data Network Name (i.e., Access Point Name in 4G). For more information check clause 9A of 3GPP TS 23.003",
     )
+    dnns: Optional[List[str]] = Field(
+        None,
+        description="Identifies the DNN(s) to which the subscriptions applies.",
+        min_items=1,
+    )
     dnais: List[str] = Field(
         None,
         description="DNAI (Data network access identifier), see clause 5.6.7 of 3GPP TS 23.501.",
         min_items=1,
     )
+    dataVlTrnsTmRqs: List[E2eDataVolTransTimeReq] = Field(None, description="", min_items=1)
     excepRequs: List[Exception] = Field(None, description="", min_items=1)
     exptAnaType: ExpectedAnalyticsType
     exptUeBehav: ExpectedUeBehaviourData
@@ -946,6 +987,71 @@ class AnalyticsEventSubsc(ExtraBaseModel):
     tgtUe: TargetUeId
 
 
+class AccessType(str, Enum):
+    """Indicates whether the access is via 3GPP or via non-3GPP"""
+    _3GPP = "3GPP"
+    non_3GPP = "NON_3GPP"
+
+
+class DataVolumeTransferTime(ExtraBaseModel):
+    """Indicates the E2E data volume transfer time and the data volume used to derive the transfer time."""
+
+    uplinkVolume: Optional[int] = Field(None, description="Unsigned integer identifying a volume in units of bytes.", ge=0)
+    avgTransTimeUl: Optional[int] = Field(None, description="Unsigned Integer", ge=0)
+    varTransTimeUl: Optional[float] = Field(None)
+    downlinkVolume: Optional[int] = Field(None, description="Unsigned integer identifying a volume in units of bytes.", ge=0)
+    avgTransTimeDl: Optional[int] = Field(None, description="Unsigned Integer", ge=0)
+    varTransTimeDl: Optional[float] = Field(None)
+
+
+class E2eDataVolTransTimePerUe(ExtraBaseModel):
+    """Represents the E2E data volume transfer time per UE."""
+    supi: Optional[Supi] = Field(None)
+    gpsi: Optional[Gpsi] = Field(None)
+    snssai: Optional[Snssai] = None
+    accessType: Optional[AccessType] = Field(None)
+    ratTypes: Optional[List[RatType]] = Field(None, description="The RAT types.", min_items=1)
+    appId: Optional[str] = Field(None, description="String providing an application identifier.")
+    ueLoc: Optional[UserLocation] = Field(None)
+    dnn: Optional[str] = Field(
+        "province1.mnc01.mcc202.gprs",
+        description="String identifying the Data Network Name (i.e., Access Point Name in 4G). For more information check clause 9A of 3GPP TS 23.003",
+    )
+    spatialValidity: Optional[NetworkAreaInfo] = Field(None)
+    validityPeriod: Optional[TimeWindow] = Field(None)
+    dataVolTransTime: Optional[DataVolumeTransferTime] = Field(None)
+
+
+
+class E2eDataVolTransTimePerTS(ExtraBaseModel):
+    """Represents the E2E data volume transfer time analytics per Time Slot."""
+
+    tsStart: datetime = Field(description="string with format 'date-time' as defined in OpenAPI.")
+    tsDuration: int = Field(description="indicating a time in seconds.", ge=0)
+    e2eDataVolTransTimePerUe: List[E2eDataVolTransTimePerUe] = Field(description="", min_items=1)
+
+
+class E2eDataVolTransTimeUeList(ExtraBaseModel):
+    """Contains the list of UEs classified based on experience level of E2E Data Volume Transfer Time"""
+    highLevel: Optional[List[Supi]] = Field(None, min_items=1)
+    mediumLevel: Optional[List[Supi]] = Field(None, min_items=1)
+    lowLevel: Optional[List[Supi]] = Field(None, min_items=1)
+    lowRatio: Optional[SamplingRatio] = Field(None)
+    mediumRatio: Optional[SamplingRatio] = Field(None)
+    highRatio: Optional[SamplingRatio] = Field(None)
+    spatialValidity: Optional[NetworkAreaInfo] = Field(None)
+    validityPeriod: Optional[TimeWindow] = Field(None)
+
+
+class E2eDataVolTransTimeInfo(ExtraBaseModel):
+    """Represents the E2E data volume transfer time analytics information when subscribed event is \"E2E_DATA_VOL_TRANS_TIME\" """
+
+    e2eDataVolTransTimes: List[E2eDataVolTransTimePerTS] = Field(min_items=1)
+    e2eDataVolTransTimeUeLists: Optional[List[E2eDataVolTransTimeUeList]] = Field(None, "", min_items=1)
+    geoDistrInfos: Optional[List[GeoDistributionInfo]] = Field(None, "", min_items=1)
+    confidence: Optional[int] = Field(None, description="", ge=0)
+
+
 class AnalyticsEventNotif(ExtraBaseModel):
     """Represents an analytics event to be reported."""
 
@@ -967,6 +1073,7 @@ class AnalyticsEventNotif(ExtraBaseModel):
     svcExps: List[ServiceExperienceInfo] = Field(None, description="", min_items=1)
     start: datetime
     timeStampGen: datetime
+    dataVlTrnsTmIfs: Optional[List[E2eDataVolTransTimeInfo]] = Field(None, description="", min_items=1)
 
 
 class AnalyticsEventNotification(ExtraBaseModel):

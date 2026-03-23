@@ -1,12 +1,17 @@
+import logging
 from typing import Any, List
 
+import requests
+from pydantic import ValidationError
 from requests import status_codes
+from bson.objectid import ObjectId
+from app.core.metrics_provider import metrics_provider
 from app.schemas.analyticsExposure import (
     LocationArea5G,
     UeLocationInfo,
     AnalyticsEvent,
     UeMobilityExposure,
-    AnalyticsData,
+    AnalyticsData, AnalyticsExposureSubscCreate,
 )
 from app.schemas.monitoringevent import GeographicArea, GeographicalCoordinates, Point
 from fastapi import APIRouter, Depends, HTTPException, Path, Response, Request
@@ -84,9 +89,36 @@ def create_subscription(
     """
     Create new subscription.
     """
+
+    try:
+        subscriptionId = ObjectId()
+        slice_id = 'abcd'
+        response = requests.put(
+            f"http://10.255.28.207:30080/config/{slice_id}",
+            json=jsonable_encoder({
+                "subscriptionId": str(subscriptionId),
+                "ue_ips": ['10.0.0.1'],
+                "maxUplinkVolume": 10,
+            }),
+            timeout=(3.05, 27)
+        )
+
+    except (requests.exceptions.Timeout, requests.exceptions.TooManyRedirects, requests.exceptions.RequestException) as ex:
+        logging.critical("Failed to setup alerting for subscription")
+        logging.critical(ex)
+        raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
+    except ValueError as ex:
+        logging.critical("Invalid json response for subscription")
+        logging.critical(ex)
+        raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
+
+    if response.status_code != 204:
+        logging.critical("Unexpected return status code %d for subscription, response: %s", response.status_code, response)
+        raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
+
     db_mongo = client.fastapi
     json_data = jsonable_encoder(item_in)
-    json_data.update({"owner_id": current_user.id})
+    json_data.update({"owner_id": current_user.id, "_id": subscriptionId})
 
     inserted_doc = crud_mongo.create(db_mongo, db_collection, json_data)
 
@@ -251,7 +283,7 @@ def delete_subscription(
 
 
 @router.post("/{afId}/fetch")
-def fetch_analytics(
+async def fetch_analytics(
     *,
     db: Session = Depends(deps.get_db),
     afId: str = Path(
@@ -264,7 +296,7 @@ def fetch_analytics(
 
     db_mongo = client.fastapi
 
-    if item_in.analyEvent != AnalyticsEvent.ueMobility:
+    if item_in.analyEvent not in [AnalyticsEvent.ueMobility, AnalyticsEvent.dnPerformance]:
         raise HTTPException(
             status_code=501, detail="This Analytics Event has not been implemented"
         )
@@ -296,6 +328,8 @@ def fetch_analytics(
 
     if user_equipment is None:
         raise HTTPException(status_code=404, detail="The current device was not found")
+
+    print(await metrics_provider.get_analytics_infos(item_in, user_equipment))
 
     point = Point(
         shape="POINT",

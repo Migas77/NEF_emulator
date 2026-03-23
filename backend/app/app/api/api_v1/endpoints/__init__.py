@@ -17,6 +17,7 @@ from .cpParameterProvisioning import router
 from .pfdManagement import router
 from .npConfiguration import router
 from .racsProvisioning import router
+from .analyticsAlertIngestion import router
 from .analyticsExposure import router
 from .broker import router
 from .tests import router
