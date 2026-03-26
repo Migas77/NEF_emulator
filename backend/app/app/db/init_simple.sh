@@ -492,6 +492,54 @@ curl -X 'POST' \
   "path": 2
 }'
 
+printf '\n==================================================\n'
+printf 'Initiallizing UE Groups for admin...'
+printf '\n==================================================\n'
+
+curl -X 'POST' \
+  "${URL}:${PORT}/api/v1/UEGroups/imsiGroup" \
+  -H 'accept: application/json' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "UEs": [
+      "202010000000001",
+      "202010000000002"
+  ]
+}'
+
+curl -X 'POST' \
+  "${URL}:${PORT}/api/v1/UEGroups/imsiGroup" \
+  -H 'accept: application/json' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "UEs": [
+      "202010000000001",
+      "202010000000003"
+  ]
+}'
+
+curl -X 'POST' \
+  "${URL}:${PORT}/api/v1/UEGroups/exterGroup" \
+  -H 'accept: application/json' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "exterGroupId": "groupA@domain.pt",
+  "imsiGroupId": 1
+}'
+
+curl -X 'POST' \
+  "${URL}:${PORT}/api/v1/UEGroups/exterGroup" \
+  -H 'accept: application/json' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "exterGroupId": "groupB@domain.pt",
+  "imsiGroupId": 2
+}'
+
 # printf '\n==================================================\n'
 # printf 'Delete Report'
 # printf '\n==================================================\n'

@@ -2,6 +2,7 @@ from .crud_path import path, points
 from .crud_user import user
 from .crud_gNB import gnb
 from .crud_Cell import cell
+from .crud_UEGroups import imsi_group, external_group
 from .crud_UE import ue
 from .crud_monitoringevent import monitoring
 

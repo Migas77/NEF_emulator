@@ -5,6 +5,7 @@ from .ue_movement import router
 from .paths import router
 from .gNB import router
 from .Cell import router
+from .UEGroups import router
 from .UE import router
 from .qosInformation import router
 from .afSessionWithQoS import router

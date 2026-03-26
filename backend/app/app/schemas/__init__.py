@@ -4,6 +4,7 @@ from .token import Token, TokenPayload
 from .user import User, UserCreate, UserInDB, UserUpdate
 from .gNB import gNB, gNBCreate, gNBInDB, gNBUpdate
 from .Cell import Cell, CellCreate, CellInDB, CellUpdate
+from .UEGroups import ExternalGroupBase, ExternalGroup, ExternalGroupCreate, IMSIGroupBase, IMSIGroup, IMSIGroupCreate
 from .UE import UE, UECreate, UEUpdate, Speed, ue_path, UEhex
 from .commonData import (
     Snssai,

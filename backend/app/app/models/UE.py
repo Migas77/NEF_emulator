@@ -43,3 +43,5 @@ class UE(Base):
     # Relationships
     owner = relationship("User", back_populates="UEs")
     Cell = relationship("Cell", back_populates="UE")
+    imsi_groups = relationship("IMSIGroup", secondary="imsigroup_ue_membership", back_populates="UEs")
+
