@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from requests import Session
-from sqlalchemy.testing import exclude
 
 from app import crud, models, schemas
 from app.crud import ue as crud_ue, external_group as crud_external_group, imsi_group as crud_imsi_group
@@ -36,16 +35,19 @@ def create_imsi_group_identifier(
 
 @router.post("/exterGroup", response_model=schemas.ExternalGroup)
 def create_external_group_identifier(
-        *,
-        db: Session = Depends(deps.get_db),
-        item_in: schemas.ExternalGroupCreate,
-        current_user: models.User = Depends(deps.get_current_active_user),
+    *,
+    db: Session = Depends(deps.get_db),
+    item_in: schemas.ExternalGroupCreate,
+    current_user: models.User = Depends(deps.get_current_active_user),
 ) -> schemas.ExternalGroupBase:
     imsi_group = crud_imsi_group.get(db=db, id=item_in.imsiGroupId)
     if not imsi_group:
         raise HTTPException(status_code=404, detail="IMSI Group not found")
 
-    external_group = crud_external_group.create(db=db, obj_in=item_in)
+    external_group = crud_external_group.create_if_not_exists(db=db, obj_in=item_in)
+    if not external_group:
+        raise HTTPException(status_code=400, detail="External group with same exterGroupId already exists")
+
     return external_group
 
 

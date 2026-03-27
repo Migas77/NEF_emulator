@@ -1,6 +1,8 @@
+import logging
+from typing import Optional
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
 from app.crud.base import CRUDBase
 from app.models import IMSIGroup, ExternalGroup
 from app.schemas import IMSIGroupCreate
@@ -19,8 +21,19 @@ class CRUD_IMSIGroup(CRUDBase[IMSIGroup, IMSIGroupCreate, IMSIGroupUpdate]):
 
 
 class CRUD_ExternalGroup(CRUDBase[ExternalGroup, ExternalGroupCreate, ExternalGroupUpdate]):
-    pass
 
+    def create_if_not_exists(self, db: Session, *, obj_in: ExternalGroupCreate) -> Optional[ExternalGroup]:
+        try:
+            is_present = db.query(self.model).filter_by(exterGroupId=obj_in.exterGroupId).first()
+            if is_present:
+                return None
+
+            return self.create(db=db, obj_in=obj_in)
+        except IntegrityError as e:
+            # prevent TOCTOU problem:
+            logging.warning(f"Unique violation detected for {obj_in}: {e.orig}")
+            db.rollback()
+            return None
 
 
 imsi_group = CRUD_IMSIGroup(IMSIGroup)
