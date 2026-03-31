@@ -43,6 +43,7 @@ class NotificationResponder:
 
                 if res.status_code == 308:
                     permanent_redirect = location
+                continue
 
             raise Exception(f"Error while delivering notification (status code: {res.status_code}): {res.text}")
         else:

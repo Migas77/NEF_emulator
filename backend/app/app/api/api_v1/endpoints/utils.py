@@ -17,6 +17,7 @@ from app.api import deps
 from app.schemas import monitoringevent, resourceManagementOfBdt
 from app.schemas.afSessionWithQos import UserPlaneNotificationData
 from app.core.config import settings
+from app.schemas.analyticsExposure import AnalyticsEventNotif
 from app.schemas.commonData import SupportedFeatures
 
 #List holding notifications from 
@@ -131,7 +132,13 @@ def create_item(item: monitoringevent.MonitoringNotification, request: Request):
 
     http_response = JSONResponse(content={'ack' : 'TRUE'}, status_code=200)
     add_notifications(request, http_response, True)
-    return http_response 
+    return http_response
+
+@router.post("/analyticsexposure/callback")
+def create_item(item: AnalyticsEventNotif, request: Request):
+    http_response = JSONResponse(content={'ack' : 'TRUE'}, status_code=200)
+    add_notifications(request, http_response, True)
+    return http_response
 
 @router.post("/bdt/callback")
 def create_item(item: resourceManagementOfBdt.ExNotification, request: Request):

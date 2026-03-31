@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any, List
 
@@ -5,13 +6,16 @@ import requests
 from pydantic import ValidationError
 from requests import status_codes
 from bson.objectid import ObjectId
-from app.core.metrics_provider import metrics_provider
+
+from app.api.deps import get_db
+from app.core.subscription_analytics_poller import subscription_analytics_poller
+from app.core.subscription_task_registry import subscription_task_registry
 from app.schemas.analyticsExposure import (
     LocationArea5G,
     UeLocationInfo,
     AnalyticsEvent,
     UeMobilityExposure,
-    AnalyticsData, AnalyticsExposureSubscCreate,
+    AnalyticsData, AnalyticsExposureSubscCreate, analyEvent_analyEventFilterReq_mapping,
 )
 from app.schemas.monitoringevent import GeographicArea, GeographicalCoordinates, Point
 from fastapi import APIRouter, Depends, HTTPException, Path, Response, Request
@@ -28,6 +32,30 @@ from app.api.api_v1.endpoints.utils import add_notifications
 
 router = APIRouter()
 db_collection = "AnalyticsExposure"
+supported_subscription_events = [AnalyticsEvent.ueComm, AnalyticsEvent.wlanPerformance, AnalyticsEvent.e2eDataVolTransTime]
+
+@router.on_event("startup")
+def populate_task_registry():
+    db_mongo = client.fastapi
+    existing_subscriptions = crud_mongo.read_all_by_multiple_pairs(
+        db_mongo, db_collection,
+        **{"analyEventsSubs.analyEvent": {"$in": supported_subscription_events}}
+    )
+    for subscription in existing_subscriptions:
+        subscription_id_str = str(subscription["_id"])
+        db_sql = next(get_db())
+        db_event = asyncio.Event()
+        subscription_task_registry.register(
+            subscription_id_str,
+            task=asyncio.create_task(subscription_analytics_poller.poll(
+                db_mongo,
+                db_sql,
+                subscription_id=subscription_id_str,
+                db_event=db_event
+            )),
+            event=db_event
+        )
+
 
 
 @router.get(
@@ -74,7 +102,7 @@ def read_active_subscriptions(
     response_model=schemas.AnalyticsExposureSubsc,
     responses={201: {"model": schemas.AnalyticsExposureSubsc}},
 )
-def create_subscription(
+async def create_subscription(
     *,
     afId: str = Path(
         ...,
@@ -90,31 +118,88 @@ def create_subscription(
     Create new subscription.
     """
 
-    try:
-        subscriptionId = ObjectId()
-        slice_id = 'abcd'
-        response = requests.put(
-            f"http://10.255.28.207:30080/config/{slice_id}",
-            json=jsonable_encoder({
-                "subscriptionId": str(subscriptionId),
-                "ue_ips": ['10.0.0.1'],
-                "maxUplinkVolume": 10,
-            }),
-            timeout=(3.05, 27)
-        )
+    analy_confs = []
+    subscriptionId = ObjectId()
+    ues = []
+    for event_sub in item_in.analyEventsSubs:
 
-    except (requests.exceptions.Timeout, requests.exceptions.TooManyRedirects, requests.exceptions.RequestException) as ex:
-        logging.critical("Failed to setup alerting for subscription")
-        logging.critical(ex)
-        raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
-    except ValueError as ex:
-        logging.critical("Invalid json response for subscription")
-        logging.critical(ex)
-        raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
+        if event_sub.analyEvent not in supported_subscription_events:
+            raise HTTPException(
+                status_code=501, detail=f"Analytics Event {event_sub.analyEvent} has not been implemented"
+            )
 
-    if response.status_code != 204:
-        logging.critical("Unexpected return status code %d for subscription, response: %s", response.status_code, response)
-        raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
+        if not (
+            event_sub.tgtUe
+            and any(
+                [event_sub.tgtUe.gpsi, event_sub.tgtUe.anyUeInd, event_sub.tgtUe.exterGroupId]
+            )
+        ):
+            raise HTTPException(status_code=404, detail="No Target UE Specified")
+
+        if not (event_sub.tgtUe.gpsi or event_sub.tgtUe.exterGroupId):
+            raise HTTPException(status_code=501, detail="Not Implemented")
+
+        user_equipments = []
+        if event_sub.tgtUe.gpsi:
+            tgtUe = event_sub.tgtUe.gpsi
+            if tgtUe.startswith("msisdn-"):
+                user_equipments.append(ue.get_supi(db, supi=tgtUe.split("msisdn-")[1]))
+
+            elif tgtUe.startswith("extid-"):
+                user_equipments.append(ue.get_externalId(
+                    db, externalId=tgtUe.split("extid-")[1], owner_id=current_user.id
+                ))
+
+        elif event_sub.tgtUe.exterGroupId:
+            user_equipments = ue.get_by_exterGroupId(db, exterGroupId=event_sub.tgtUe.exterGroupId)
+
+        if not user_equipments:
+            raise HTTPException(status_code=404, detail=f"Device not found for tgtUe {event_sub.tgtUe}")
+
+        # TODO: Doubts -> Is appServerAddrs applicable for event E2eDataVolTransTime (not specified in the column applicability)
+        # analy_conf = {
+        #     "analyEvent": event_sub.analyEvent,
+        #     "analytics": [
+        #         r.dict(exclude_none=True)
+        #         for r in getattr(
+        #             event_sub.analyEventFilter,
+        #             analyEvent_analyEventFilterReq_mapping.get(event_sub.analyEvent),
+        #             []
+        #         )
+        #     ],
+        #     "tgtUes": [{
+        #         'supi': user_equipment.supi,
+        #         'ipv4Addr': user_equipment.ip_address_v4,
+        #         'ipv6Addr': user_equipment.ip_address_v6,
+        #     } for user_equipment in user_equipments],
+        #     # "appServerAddrs": event_sub.analyEventFilter.appServerAddrs,
+        # }
+        #
+        # analy_confs.append(analy_conf)
+
+
+
+    # try:
+    #     response = requests.put(
+    #         # f"http://10.255.28.207:30080/config/{subscriptionId}",
+    #         f"http://host.docker.internal:8000/config/{subscriptionId}",
+    #         json=jsonable_encoder(analy_confs),
+    #         timeout=(3.05, 27)
+    #     )
+    #
+    # except (requests.exceptions.Timeout, requests.exceptions.TooManyRedirects, requests.exceptions.RequestException) as ex:
+    #     logging.critical("Failed to setup alerting for subscription")
+    #     logging.critical(ex)
+    #     raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
+    # except ValueError as ex:
+    #     logging.critical("Invalid json response for subscription")
+    #     logging.critical(ex)
+    #     raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
+    #
+    # if response.status_code != 204:
+    #     print(response.json())
+    #     logging.critical("Unexpected return status code %d for subscription", response.status_code)
+    #     raise HTTPException(status_code=500, detail="Failed to register alerting for subscription")
 
     db_mongo = client.fastapi
     json_data = jsonable_encoder(item_in)
@@ -137,6 +222,18 @@ def create_subscription(
     )
 
     updated_doc.pop("owner_id")  # Remove owner_id from the response
+
+    # db_event = asyncio.Event()
+    # subscription_id_str = str(subscriptionId)
+    # subscription_task_registry.register(
+    #     subscription_id_str,
+    #     task=asyncio.create_task(subscription_analytics_poller.poll(
+    #         db_mongo,
+    #         subscription_id=subscription_id_str,
+    #         db_event=db_event
+    #     )),
+    #     event=db_event
+    # )
 
     http_response = JSONResponse(
         content=updated_doc, status_code=201, headers=response_header
@@ -191,6 +288,11 @@ def update_subscription(
     # Retrieve the updated document | UpdateResult is not a dict
     updated_doc = crud_mongo.read_uuid(db_mongo, db_collection, subscriptionId)
     updated_doc.pop("owner_id")
+
+    task, db_event = subscription_task_registry.get()
+    if not task.done() and db_event is not None:
+        db_event.set()
+
     http_response = JSONResponse(content=updated_doc, status_code=200)
     add_notifications(http_request, http_response, False)
     return http_response
@@ -277,6 +379,11 @@ def delete_subscription(
         raise HTTPException(status_code=400, detail="Not enough permissions")
 
     crud_mongo.delete_by_uuid(db_mongo, db_collection, subscriptionId)
+
+    task, db_event = subscription_task_registry.get()
+    if not task.done() and db_event is not None:
+        db_event.set()
+
     http_response = JSONResponse(content=retrieved_doc, status_code=200)
     add_notifications(http_request, http_response, False)
     return http_response

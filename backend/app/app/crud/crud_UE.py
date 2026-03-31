@@ -3,6 +3,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.crud.base import CRUDBase
+from app.models import IMSIGroup_UE_membership, IMSIGroup, ExternalGroup
 from app.models.UE import UE
 from app.schemas.UE import UECreate, UEUpdate
 
@@ -62,12 +63,24 @@ class CRUD_UE(CRUDBase[UE, UECreate, UEUpdate]):
         )
 
     def get_externalId(
-        self, db: Session, *, externalId: str, owner_id: int
+        self, db: Session, *, externalId: str, owner_id: int | None = None
     ) -> Optional[UE]:
+        opt_owner_filter = ((UE.owner_id == owner_id,) if owner_id is not None else ())
         return (
             db.query(self.model)
-            .filter(UE.external_identifier == externalId, UE.owner_id == owner_id)
+            .filter(UE.external_identifier == externalId, *opt_owner_filter)
             .first()
+        )
+
+    def get_by_exterGroupId(
+        self, db: Session, *, exterGroupId: str
+    ) -> Optional[UE]:
+        return (
+            db.query(UE)
+            .join(IMSIGroup_UE_membership, UE.id == IMSIGroup_UE_membership.c.ue_id)
+            .join(ExternalGroup, ExternalGroup.imsiGroupId == IMSIGroup_UE_membership.c.imsiGroupId)
+            .filter(ExternalGroup.exterGroupId == exterGroupId)
+            .all()
         )
 
     def get_by_Cell(self, db: Session, *, cell_id: int) -> List[UE]:

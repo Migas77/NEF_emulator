@@ -24,7 +24,7 @@ class CRUD_ExternalGroup(CRUDBase[ExternalGroup, ExternalGroupCreate, ExternalGr
 
     def create_if_not_exists(self, db: Session, *, obj_in: ExternalGroupCreate) -> Optional[ExternalGroup]:
         try:
-            is_present = db.query(self.model).filter_by(exterGroupId=obj_in.exterGroupId).first()
+            is_present = self.get_by_exterGroupId(db=db, exterGroupId=obj_in.exterGroupId)
             if is_present:
                 return None
 
@@ -34,6 +34,9 @@ class CRUD_ExternalGroup(CRUDBase[ExternalGroup, ExternalGroupCreate, ExternalGr
             logging.warning(f"Unique violation detected for {obj_in}: {e.orig}")
             db.rollback()
             return None
+
+    def get_by_exterGroupId(self, db: Session, *, exterGroupId: str) -> Optional[ExternalGroup]:
+        return db.query(self.model).filter_by(exterGroupId=exterGroupId).first()
 
 
 imsi_group = CRUD_IMSIGroup(IMSIGroup)

@@ -57,6 +57,8 @@ from .analyticsExposure import (
     AnalyticsEventSubsc,
     AnalyticsExposureSubsc,
     AnalyticsEventNotification,
+    NotificationMethod,
+    EventReportingRequirement
 )
 from .utils import ExtraBaseModel
 from .scenario import scenario

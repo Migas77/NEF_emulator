@@ -1,7 +1,8 @@
 from typing import Optional, List, Union
 from datetime import datetime
-from app.schemas.monitoringevent import CivicAddress, GeographicArea
-from pydantic import BaseModel, Field, IPvAnyAddress, AnyHttpUrl, constr
+
+from app.schemas.monitoringevent import CivicAddress, GeographicArea, TrafficInformation
+from pydantic import BaseModel, Field, IPvAnyAddress, AnyHttpUrl, constr, root_validator, validator
 from enum import Enum
 from .commonData import (
     Snssai,
@@ -17,7 +18,7 @@ from .commonData import (
     AnalyticsSubset,
     PartitioningCriteria,
     NotificationFlag,
-    WebsockNotifConfig, SamplingRatio,
+    WebsockNotifConfig, SamplingRatio, DurationSec, Uinteger,
 )
 from .cpParameterProvisioning import ScheduledCommunicationTime
 from .utils import ExtraBaseModel
@@ -63,20 +64,52 @@ class NotificationMethod(str, Enum):
 ############### TS 29.523 Types ###############
 
 
+class BufferedNotificationsAction(str, Enum):
+    """Indicates the required action by the event producer NF on the buffered Notifications."""
+
+    sendAll = "SEND_ALL"
+    discardAll = "DISCARD_ALL"
+    dropOld = "DROP_OLD"
+
+class SubscriptionAction(str, Enum):
+    """Indicates the required action by the event producer NF on the event subscription if an exception occurs while the event is muted."""
+
+    close = "CLOSE"
+    continueWithMuting = "CONTINUE_WITH_MUTING"
+    continueWithoutMuting = "CONTINUE_WITHOUT_MUTING"
+
+
+class MutingExceptionInstructions(ExtraBaseModel):
+    """Indicates to an Event producer NF instructions for the subscription and stored events when an exception (e.g.
+    full buffer) occurs at the Event producer NF while the event is muted."""
+
+    bufferedNotifs: Optional[BufferedNotificationsAction] = Field(None)
+    subscription: Optional[SubscriptionAction] = Field(None)
+
+
+class MutingNotificationsSettings(ExtraBaseModel):
+    """Indicates the Event producer NF settings to the Event consumer NF"""
+
+    maxNoOfNotif: Optional[int] = Field(None)
+    durationBufferedNotif: Optional[int] = Field(None, ge=0)
+
+
 class ReportingInformation(ExtraBaseModel):
     """Represents the type of reporting that the subscription requires."""
 
-    immRep: bool
-    notifMethod: NotificationMethod
-    maxReportNbr: int = Field(None, description="", ge=0)
-    monDur: datetime
+    immRep: bool = False
+    notifMethod: NotificationMethod = NotificationMethod.onEventDetection
+    maxReportNbr: int = Field(None, description="", ge=0) # Is None if there is no limit
+    monDur: datetime = Field(None, description="")
     repPeriod: int = Field(None, description="", ge=0)
     sampRatio: int = Field(None, description="Expressed in percent.", ge=1, le=100)
     partitionCriteria: List[PartitioningCriteria] = Field(
         None, description="", min_items=1
     )
     grpRepTime: int = Field(None, description="", ge=0)
-    notifFlag: NotificationFlag
+    notifFlag: NotificationFlag = NotificationFlag.activate
+    notifFlagInstruct: Optional[MutingExceptionInstructions] = Field(None)
+    mutingSetting: Optional[MutingNotificationsSettings] = Field(None)
 
 
 ###############################################
@@ -368,9 +401,9 @@ class TrafficCharacterization(ExtraBaseModel):
         "province1.mnc01.mcc202.gprs",
         description="String identifying the Data Network Name (i.e., Access Point Name in 4G). For more information check clause 9A of 3GPP TS 23.003",
     )
-    snssai: Snssai
+    snssai: Optional[Snssai] = Field(None)
     appId: str = Field("", description="String providing an application identifier.")
-    fDescs: List[IpEthFlowDescription] = Field(
+    fDescs: Optional[List[IpEthFlowDescription]] = Field(
         None, description="", min_items=1, max_items=2
     )
     ulVol: int = Field(
@@ -378,13 +411,13 @@ class TrafficCharacterization(ExtraBaseModel):
         description=" Unsigned integer identifying a volume in units of bytes.",
         ge=0,
     )
-    ulVolVariance: float
+    ulVolVariance: Optional[float] = Field(None)
     dlVol: int = Field(
         None,
         description=" Unsigned integer identifying a volume in units of bytes.",
         ge=0,
     )
-    dlVolVariance: float
+    dlVolVariance: Optional[float] = Field(None)
 
 
 class AppListForUeComm(ExtraBaseModel):
@@ -407,19 +440,25 @@ class SessInactTimerForUeComm(ExtraBaseModel):
 class UeCommunication(ExtraBaseModel):
     """Represents UE communication information."""
 
-    commDur: int = Field(None, description="", ge=0)
-    commDurVariance: float
-    perioTime: int = Field(None, description="", ge=0)
-    perioTimeVariance: float
-    ts: int = Field(None, description="", ge=0)
-    tsVariance: float
-    recurringTime: ScheduledCommunicationTime
+    commDur: Optional[int] = Field(description="", ge=0)
+    commDurVariance: Optional[float] = Field(None)
+    perioTime: Optional[int] = Field(None, description="", ge=0)
+    perioTimeVariance: Optional[float] = Field(None)
+    ts: Optional[int] = Field(None, description="", ge=0)
+    tsVariance: Optional[float] = Field(None)
+    recurringTime: Optional[ScheduledCommunicationTime] = Field(None)
     trafChar: TrafficCharacterization
-    ratio: int = Field(None, description="", ge=1, le=100)
-    perioCommInd: bool
-    confidence: int = Field(None, description="", ge=0)
-    anaOfAppList: AppListForUeComm
-    sessInactTimer: SessInactTimerForUeComm
+    ratio: Optional[int] = Field(None, description="", ge=1, le=100)
+    perioCommInd: Optional[bool] = False
+    confidence: Optional[int] = Field(None, description="", ge=0)
+    anaOfAppList: Optional[AppListForUeComm] = Field(None)
+    sessInactTimer: Optional[SessInactTimerForUeComm] = Field(None)
+
+    @root_validator
+    def ts_or_recurringTime_shall_be_provided(cls, v):
+        if v.get("ts") is None and v.get("recurringTime") is None:
+            raise ValueError('Either "ts" or "recurringTime" shall be provided.')
+        return v
 
 
 class ApplicationVolume(ExtraBaseModel):
@@ -636,17 +675,24 @@ class AnalyticsMetadataIndication(ExtraBaseModel):
 class EventReportingRequirement(ExtraBaseModel):
     """Represents the type of reporting that the subscription requires."""
 
-    accuracy: Accuracy
+    accuracy: Optional[Accuracy] = Field(None)
     accPerSubset: List[Accuracy] = Field(None, description="", min_items=1)
-    startTs: datetime
-    endTs: datetime
-    offsetPeriod: int
-    sampRatio: int = Field(None, description="Expressed in percent.", ge=1, le=100)
-    maxObjectNbr: int = Field(None, description="", ge=0)
-    maxSupiNbr: int = Field(None, description="", ge=0)
-    timeAnaNeeded: datetime
+    startTs: Optional[datetime] = Field(None)
+    endTs: Optional[datetime] = Field(None)
+    offsetPeriod: Optional[int] = Field(None)
+    sampRatio: Optional[int] = Field(None, description="Expressed in percent.", ge=1, le=100)
+    maxObjectNbr: Optional[int] = Field(None, description="", ge=0)
+    maxSupiNbr: Optional[int] = Field(None, description="", ge=0)
+    timeAnaNeeded: Optional[datetime] = Field(None)
     anaMeta: List[AnalyticsMetadata] = Field(None, description="", min_items=1)
-    anaMetaInd: AnalyticsMetadataIndication
+    anaMetaInd: Optional[AnalyticsMetadataIndication] = Field(None)
+    # histAnaTimePeriod
+
+    @root_validator
+    def offset_and_startEndTs_mutually_exclusive(cls, v):
+        if v.get("offsetPeriod") is not None and any(v.get(ts) is not None for ts in ["startTs", "endTs"]):
+            raise ValueError('When the "offsetPeriod" attribute is included, the "startTs" and "endTs" attributes shall not be included.')
+        return v
 
 
 class NetworkPerfRequirement(ExtraBaseModel):
@@ -682,6 +728,8 @@ class AnalyticsEvent(str, Enum):
     relativeProximity = "RELATIVE_PROXIMITY"
     wlanPerformance = "WLAN_PERFORMANCE"
     nsLoadLevel = "NS_LOAD_LEVEL"
+
+
 
 
 class GeographicalArea(ExtraBaseModel):
@@ -848,9 +896,15 @@ class AnalyticsEventFilter(ExtraBaseModel):
 class TargetUeId(ExtraBaseModel):
     """Represents the target UE(s) information."""
 
-    anyUeInd: Optional[bool]
-    gpsi: constr(regex=r"^(msisdn-[0-9]{5,15}|extid-.+@.+|.+)$")
-    exterGroupId: str = Field("Group1@domain.com", description="")
+    anyUeInd: Optional[bool] = False
+    gpsi: Optional[constr(regex=r"^(msisdn-[0-9]{5,15}|extid-.+@.+|.+)$")] = Field(None)
+    exterGroupId: Optional[str] = Field(None, description="")
+
+    @root_validator
+    def only_one_identifier_present(cls, v):
+        if sum(bool(v.get(k)) for k in ["anyUeInd", "gpsi", "exterGroupId"]) > 1:
+            raise ValueError('Only one of "anyUeInd", "gpsi" or "exterGroupId" attribute may be present.')
+        return v
 
 
 class UeMobilityExposure(ExtraBaseModel):
@@ -908,7 +962,7 @@ class E2eDataVolTransTimeCriterion(str, Enum):
     e2eDataVolTransTime = "E2E_DATA_VOL_TRANS_TIME"
 
 
-class DataVolume:
+class DataVolume(ExtraBaseModel):
     """Data Volume including UL/DL."""
 
     uplinkVolume: Optional[int] = Field(None, description="", ge=0)
@@ -920,12 +974,36 @@ class E2eDataVolTransTimeReq(ExtraBaseModel):
 
     criterion: Optional[E2eDataVolTransTimeCriterion] = Field(None, description="")
     order: Optional[MatchingDirection] = Field(None, description="")
-    highTransTmThr: Optional[int] = Field(None, description="", ge=0)
-    lowTransTmThr: Optional[int] = Field(None, description="", ge=0)
-    repeatDataTrans: Optional[int] = Field(None, description="", ge=0)
-    tsIntervalDataTrans: Optional[int] = Field(None, description="", ge=0)
+    highTransTmThr: Optional[Uinteger] = Field(None)
+    lowTransTmThr: Optional[Uinteger] = Field(None)
+    repeatDataTrans: Optional[Uinteger] = Field(None)
+    tsIntervalDataTrans: Optional[DurationSec] = Field(None)
     dataVolume: Optional[DataVolume] = Field(None, description="")
-    maxNumberUes: Optional[int] = Field(None, description="", ge=0)
+    maxNumberUes: Optional[Uinteger] = Field(None)
+
+    @validator("order")
+    def cross_matching_direction_not_applicable(cls, v):
+        #TODO don't know if i should apply this here (this is an NWDAF concern)
+        if v == MatchingDirection.crossed:
+            raise ValueError('"CROSSED" value in data type "MatchingDirection" is not applicable for the "order" attribute.')
+        return v
+
+    @root_validator
+    def validate_thresholds(cls, v):
+        high_threshold = v.get('highTransTmThr')
+        low_threshold = v.get('lowTransTmThr')
+        if high_threshold is not None and low_threshold is not None:
+            if high_threshold < low_threshold:
+                raise ValueError('The "highTransTmThr" threshold must be greater than the "lowTransTmThr" threshold.')
+        return v
+
+    @root_validator
+    def only_one_dataTrans_field_present(cls, v):
+        if v.get("repeatDataTrans") is not None and v.get("tsIntervalDataTrans") is not None:
+            raise ValueError('Only one of "repeatDataTrans" or "tsIntervalDataTrans" attribute may be present.')
+        return v
+
+
 
 
 class AnalyticsEventFilterSubsc(ExtraBaseModel):
@@ -933,6 +1011,10 @@ class AnalyticsEventFilterSubsc(ExtraBaseModel):
 
     nwPerfReqs: List[NetworkPerfRequirement] = Field(None, description="", min_items=1)
     # locArea: LocationArea5G
+    fineGranfAreas: Optional[List[GeographicalArea]] = Field(None, min_items=1)
+    temporalGranSize: Optional[DurationSec] = Field(None)
+    spatialGranSizeTa: Optional[Uinteger] = Field(None)
+    spatialGranSizeCell: Optional[Uinteger] = Field(None)
     appIds: List[str] = Field(
         None, description="String providing an application identifier."
     )
@@ -957,6 +1039,7 @@ class AnalyticsEventFilterSubsc(ExtraBaseModel):
     matchingDir: MatchingDirection
     reptThlds: List[ThresholdLevel] = Field(None, description="", min_items=1)
     snssai: Snssai
+    snssais: Optional[List[Snssai]] = Field(None, description="", min_items=1)
     nsiIdInfos: List[NsiIdInfo] = Field(None, description="", min_items=1)
     qosReq: QosRequirement
     qosFlowRetThds: List[RetainabilityThreshold] = Field(
@@ -971,12 +1054,42 @@ class AnalyticsEventFilterSubsc(ExtraBaseModel):
     bwRequs: List[BwRequirement] = Field(None, description="", min_items=1)
     ratFreqs: List[RatFreqInformation] = Field(None, description="", min_items=1)
     appServerAddrs: List[AddrFqdn] = Field(None, description="", min_items=1)
-    extraReportReq: List[EventReportingRequirement] = Field(
-        None, description="", min_items=1
-    )
+    # wLanReqs
+    extraReportReq: EventReportingRequirement = Field(None, description="")
     maxNumOfTopAppUl: int = Field(None, description="", ge=0)
     maxNumOfTopAppDl: int = Field(None, description="", ge=0)
     # visitedLocAreas: List[LocationArea5G] = Field(None, description="", min_items=1)
+    # pduSesInfos
+    # ueCommReqs
+    # userDataConOrderCri
+    # locGranularity
+    # locOrientation
+    # ueMobilityReqs
+    # movBehavReqs
+    # relProxReqs
+    # useCaseCxt
+    # pauseFlg
+    # resumeFlg
+    # accuReq
+    # feedback
+
+
+analyEvent_analyEventFilterReq_mapping = {
+    AnalyticsEvent.ueMobility: 'ueMobilityReqs',
+    AnalyticsEvent.ueComm: 'ueCommReqs',
+    # AnalyticsEvent.abnormalBehavior:
+    # AnalyticsEvent.congestion:
+    AnalyticsEvent.networkPerformance: 'nwPerfReqs',
+    # AnalyticsEvent.qosSustainability:
+    # AnalyticsEvent.dispersion:
+    AnalyticsEvent.dnPerformance: 'dnPerfReqs',
+    # AnalyticsEvent.serviceExperience:
+    AnalyticsEvent.e2eDataVolTransTime: 'dataVlTrnsTmRqs',
+    # AnalyticsEvent.movementBehavior:
+    # AnalyticsEvent.relativeProximity:
+    # AnalyticsEvent.wlanPerformance: 'yes'
+    # AnalyticsEvent.nsLoadLevel:
+}
 
 
 class AnalyticsEventSubsc(ExtraBaseModel):
@@ -985,6 +1098,17 @@ class AnalyticsEventSubsc(ExtraBaseModel):
     analyEvent: AnalyticsEvent
     analyEventFilter: AnalyticsEventFilterSubsc
     tgtUe: TargetUeId
+
+    @root_validator
+    def analytics_event_matches_requirements(cls, v):
+
+        analy_event = v.get("analyEvent")
+        analy_event_filter = v.get("analyEventFilter")
+        # TODO change this
+        # if analy_event_filter and analy_event not in analyEvent_analyEventFilterReq_mapping:
+        #     raise ValueError(f"Analytics event '{analy_event}' does not have defined requirements in the filter.")
+
+        return v
 
 
 class AccessType(str, Enum):
@@ -1047,18 +1171,66 @@ class E2eDataVolTransTimeInfo(ExtraBaseModel):
     """Represents the E2E data volume transfer time analytics information when subscribed event is \"E2E_DATA_VOL_TRANS_TIME\" """
 
     e2eDataVolTransTimes: List[E2eDataVolTransTimePerTS] = Field(min_items=1)
-    e2eDataVolTransTimeUeLists: Optional[List[E2eDataVolTransTimeUeList]] = Field(None, "", min_items=1)
-    geoDistrInfos: Optional[List[GeoDistributionInfo]] = Field(None, "", min_items=1)
+    e2eDataVolTransTimeUeLists: Optional[List[E2eDataVolTransTimeUeList]] = Field(None, description="", min_items=1)
+    geoDistrInfos: Optional[List[GeoDistributionInfo]] = Field(None, description="", min_items=1)
     confidence: Optional[int] = Field(None, description="", ge=0)
 
+
+
+class WlanPerTsPerformanceInfo(ExtraBaseModel):
+    """WLAN performance information per Time Slot during the analytics target period."""
+
+    tsStart: datetime
+    tsDuration: DurationSec
+    rssi: Optional[int] = Field(default=None)
+    rtt: Optional[Uinteger] = Field(default=None)
+    trafficInfo: Optional[TrafficInformation] = Field(default=None)
+    numberOfUes: Optional[Uinteger] = Field(default=None)
+    confidence: Optional[Uinteger] = Field(default=None)
+
+
+class WlanPerSsIdPerformanceInfo(ExtraBaseModel):
+    """The WLAN performance per SSID."""
+
+    ssId: str
+    wlanPerTsInfos: List[WlanPerTsPerformanceInfo] = Field(min_items=1)
+
+
+class WlanPerUeIdPerformanceInfo(ExtraBaseModel):
+    """The WLAN performance per UE ID."""
+
+    supi: Optional[Supi] = Field(default=None)
+    gpsi: Optional[Gpsi] = Field(default=None)
+    wlanPerTsInfos: List[WlanPerTsPerformanceInfo] = Field(min_items=1)
+
+    @root_validator
+    def exactly_one_identifier_present(cls, v):
+        if (v.get("supi") is None) == (v.get("gpsi") is None):
+            raise ValueError('Exactly one of the "supi" and "gpsi" attributes shall be provided.')
+        return v
+
+    @root_validator
+    def numberOfUes_not_applicable(cls, v):
+        wlan_per_ts_infos = v.get("wlanPerTsInfos", [])
+        for info in wlan_per_ts_infos:
+            if info.numberOfUes is not None:
+                raise ValueError('The "numberOfUes" attribute is not applicable for the WlanPerUeIdPerformanceInfo data type')
+        return v
+
+class WlanPerformInfo(ExtraBaseModel):
+    """The WLAN performance related information."""
+
+    locArea: Optional[LocationArea5G] = Field(default=None)
+    wlanPerSsidInfos: List[WlanPerSsIdPerformanceInfo] = Field(min_items=1)
+    wlanPerUeIdInfos: Optional[List[WlanPerUeIdPerformanceInfo]] = Field(default=None, min_items=1)
 
 class AnalyticsEventNotif(ExtraBaseModel):
     """Represents an analytics event to be reported."""
 
     analyEvent: AnalyticsEvent
-    expiry: datetime
+    expiry: Optional[datetime] = Field(None)
     timeStamp: datetime
-    failNotifyCode: NwdafFailureCode
+    failNotifyCode: Optional[NwdafFailureCode] = Field(None)
     rvWaitTime: int = Field(None, description="", ge=0)
     ueMobilityInfos: List[UeMobilityExposure] = Field(None, description="", min_items=1)
     ueCommInfos: List[UeCommunication] = Field(None, description="", min_items=1)
@@ -1071,9 +1243,10 @@ class AnalyticsEventNotif(ExtraBaseModel):
     disperInfos: List[DispersionInfo] = Field(None, description="", min_items=1)
     dnPerfInfos: List[DnPerfInfo] = Field(None, description="", min_items=1)
     svcExps: List[ServiceExperienceInfo] = Field(None, description="", min_items=1)
-    start: datetime
-    timeStampGen: datetime
+    start: Optional[datetime] = Field(None)
+    timeStampGen: Optional[datetime] = Field(None)
     dataVlTrnsTmIfs: Optional[List[E2eDataVolTransTimeInfo]] = Field(None, description="", min_items=1)
+    wlanInfos: Optional[List[WlanPerformInfo]] = Field(None, description="", min_items=1)
 
 
 class AnalyticsEventNotification(ExtraBaseModel):
@@ -1105,6 +1278,19 @@ class AnalyticsExposureSubscCreate(ExtraBaseModel):
     )
     websockNotifConfig: WebsockNotifConfig
 
+    @root_validator
+    def offset_present_if_repPeriod_present(cls, v):
+        is_repPeriod_absent = v.get("analyRepInfo") and v["analyRepInfo"].repPeriod is None
+
+        if is_repPeriod_absent:
+            for event_subsc in v.get("analyEventsSubs", []):
+                filter_ = event_subsc.analyEventFilter
+                filter_extra = filter_.extraReportReq
+                if filter_extra and filter_extra.offsetPeriod is not None:
+                    raise ValueError('offsetPeriod may be present if the "repPeriod" attribute is included')
+
+        return v
+
 
 class AnalyticsExposureSubsc(AnalyticsExposureSubscCreate):
     """Represents an analytics exposure subscription."""
@@ -1116,3 +1302,13 @@ class AnalyticsExposureSubsc(AnalyticsExposureSubscCreate):
 
     class Config:
         orm_mode = True
+
+
+
+# TODO: [ASK RAFAEL]
+"""
+- List[Optional[Payload]]] -> does this make sense? ask Rafael (I removed it for now to List[Payload])
+- The "supi" attribute is not applicable to the AnalyticsExposure API, the "gpsi" attribute is only applicable to the
+AnalyticsExposure API and not applicable in the current specification (USING ONLY GPSI FOR NOW in response)
+"""
+# TODO: [ASK RAFAEL]

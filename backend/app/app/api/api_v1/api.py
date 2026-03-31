@@ -14,7 +14,6 @@ api_router.include_router(endpoints.Cell.router, prefix="/Cells", tags=["Cells"]
 api_router.include_router(endpoints.UEGroups.router, prefix="/UEGroups", tags=["UEGroups"])
 api_router.include_router(endpoints.UE.router, prefix="/UEs", tags=["UEs"])
 api_router.include_router(endpoints.qosInformation.router, prefix="/qosInfo", tags=["QoS Information"])
-api_router.include_router(endpoints.analyticsAlertIngestion.router, prefix="/alerts", tags=["Analytics Alert Webhook"])
 
 
     # ---Create a subapp---

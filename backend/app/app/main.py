@@ -41,6 +41,10 @@ async def add_process_time_header(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
+# propagate startup events upwards
+for startup_event in nef_router.on_startup:
+    app.add_event_handler("startup", startup_event)
+
 # ================================= Sub Application - Northbound APIs =================================
 
 testapi = FastAPI(title="Test APIs")
