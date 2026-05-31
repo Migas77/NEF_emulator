@@ -1,0 +1,3 @@
+
+
+gandaVariabel = 5

@@ -7,3 +7,4 @@ from app.models.gNB import gNB # gNB
 from app.models.Cell import Cell # Cell
 from app.models.UE import UE # UE
 from app.models.monitoringevent import Monitoring # Monitoring API 3GPP
+from app.models.application import Application # Application (for appIds)

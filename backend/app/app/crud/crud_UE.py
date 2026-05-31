@@ -74,7 +74,7 @@ class CRUD_UE(CRUDBase[UE, UECreate, UEUpdate]):
 
     def get_by_exterGroupId(
         self, db: Session, *, exterGroupId: str
-    ) -> Optional[UE]:
+    ) -> list[UE]:
         return (
             db.query(UE)
             .join(IMSIGroup_UE_membership, UE.id == IMSIGroup_UE_membership.c.ue_id)
@@ -85,6 +85,9 @@ class CRUD_UE(CRUDBase[UE, UECreate, UEUpdate]):
 
     def get_by_Cell(self, db: Session, *, cell_id: int) -> List[UE]:
         return db.query(self.model).filter(UE.Cell_id == cell_id).all()
+
+    def get_all(self, db: Session) -> List[UE]:
+        return db.query(self.model).all()
 
     def update_coordinates(
         self, db: Session, *, lat: float, long: float, db_obj: UE

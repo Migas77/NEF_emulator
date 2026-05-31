@@ -21,6 +21,8 @@ from .commonData import (
     PartitioningCriteria,
     NotificationFlag,
     WebsockNotifConfig,
+    InvalidParam,
+    ProblemDetails,
 )
 from .monitoringevent import (
     MonitoringEventSubscription,
@@ -53,7 +55,7 @@ from .niddConfigurationTrigger import (
     NiddConfigurationTriggerReply,
 )
 from .analyticsExposure import (
-    AnalyticsExposureSubscCreate,
+    AnalyticsExposureSubscUpsert,
     AnalyticsEventSubsc,
     AnalyticsExposureSubsc,
     AnalyticsEventNotification,
@@ -62,3 +64,4 @@ from .analyticsExposure import (
 )
 from .utils import ExtraBaseModel
 from .scenario import scenario
+from .application import Application, ApplicationCreate, ApplicationUpdate, ApplicationInDB

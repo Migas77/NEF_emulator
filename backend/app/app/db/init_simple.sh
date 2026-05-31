@@ -395,7 +395,6 @@ printf '\n==================================================\n'
 printf 'Initiallizing UEs for admin...'
 printf '\n==================================================\n'
 
-
 curl -X 'POST' \
   "${URL}:${PORT}/api/v1/UEs" \
   -H 'accept: application/json' \
@@ -493,7 +492,7 @@ curl -X 'POST' \
 }'
 
 printf '\n==================================================\n'
-printf 'Initiallizing UE Groups for admin...'
+printf 'Initializing UE Groups for admin...'
 printf '\n==================================================\n'
 
 curl -X 'POST' \
@@ -516,6 +515,7 @@ curl -X 'POST' \
   -d '{
   "UEs": [
       "202010000000001",
+      "202010000000002",
       "202010000000003"
   ]
 }'
@@ -538,6 +538,24 @@ curl -X 'POST' \
   -d '{
   "exterGroupId": "groupB@domain.pt",
   "imsiGroupId": 2
+}'
+
+printf '\n==================================================\n'
+printf 'Initializing Application (appIds) for admin...'
+printf '\n==================================================\n'
+
+# Used in AnalyticsExposure API via appIds
+# First Registered Application hardwired for calculating UL/DL in WLAN_PERFORMANCE (add new entries for other appIds)
+curl -X 'POST' \
+  "${URL}:${PORT}/api/v1/applications" \
+  -H 'accept: application/json' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "app_id": "myApp",
+  "ip_address_v4": "10.0.0.4",
+  "mac_address": "22-00-00-00-00-04",
+  "description": "Sample application for AnalyticsExposure API (via appId)"
 }'
 
 # printf '\n==================================================\n'

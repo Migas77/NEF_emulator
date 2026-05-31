@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from starlette.middleware.cors import CORSMiddleware
 from app.api.api_v1.api import api_router, nef_router, tests_router
+from app.api.exception_handlers import problem_details_http_handler
 from app.core.config import settings
 import time
 
@@ -24,12 +25,14 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
+
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # ================================= Sub Application - Northbound APIs =================================
 
 nefapi = FastAPI(title="Northbound APIs")
 nefapi.include_router(nef_router, prefix=settings.API_V1_STR)
+nefapi.add_exception_handler(HTTPException, problem_details_http_handler)
 app.mount("/nef", nefapi)
 
 #Middleware - add a custom header X-Process-Time containing the time in seconds that it took to process the request and generate a response

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .UE import UE  # noqa: F401
     from .gNB import gNB  # noqa: F401
     from .Cell import Cell  # noqa: F401
+    from .application import Application  # noqa: F401
 
 
 class User(Base):
@@ -37,3 +38,4 @@ class User(Base):
     UEs = relationship("UE", back_populates="owner")
     Cells = relationship("Cell", back_populates="owner")
     gNBs = relationship("gNB", back_populates="owner")
+    applications = relationship("Application", back_populates="owner")

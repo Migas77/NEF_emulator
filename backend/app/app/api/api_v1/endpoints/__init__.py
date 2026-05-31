@@ -22,3 +22,4 @@ from .analyticsExposure import router
 from .broker import router
 from .tests import router
 from .scenario import router
+from .application import router

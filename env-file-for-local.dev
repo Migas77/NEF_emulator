@@ -23,6 +23,12 @@ SMTP_PASSWORD=pass
 EMAILS_FROM_EMAIL=user@my-email.com
 SENTRY_DSN=
 USERS_OPEN_REGISTRATION=true
+# AnalyticsExposure API
+ANALYTICSEXPOSURE__BACKEND=stub
+ANALYTICSEXPOSURE__URL=http://127.0.0.1:9090				        # For Prometheus backend
+ANALYTICSEXPOSURE__POLL_INTERVAL=10
+ANALYTICSEXPOSURE__TEMPORAL_GRAN_SIZE=60
+ANALYTICSEXPOSURE__OFFSET_PERIOD=-60
 
 # Postgres
 # info: POSTGRES_USER value ('postgres') is hard-coded in /pgadmin/servers.json

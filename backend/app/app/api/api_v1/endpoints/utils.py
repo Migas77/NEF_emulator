@@ -7,6 +7,7 @@ from json import JSONDecodeError
 
 from typing import Callable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException, RequestValidationError
 from pydantic import BaseModel
@@ -17,7 +18,7 @@ from app.api import deps
 from app.schemas import monitoringevent, resourceManagementOfBdt
 from app.schemas.afSessionWithQos import UserPlaneNotificationData
 from app.core.config import settings
-from app.schemas.analyticsExposure import AnalyticsEventNotif
+from app.schemas.analyticsExposure import AnalyticsEventNotification
 from app.schemas.commonData import SupportedFeatures
 
 #List holding notifications from 
@@ -135,7 +136,8 @@ def create_item(item: monitoringevent.MonitoringNotification, request: Request):
     return http_response
 
 @router.post("/analyticsexposure/callback")
-def create_item(item: AnalyticsEventNotif, request: Request):
+def create_item(item: AnalyticsEventNotification, request: Request):
+    # logging.info("Received Notification Callback: %s", json.dumps(jsonable_encoder(item), indent=4))
     http_response = JSONResponse(content={'ack' : 'TRUE'}, status_code=200)
     add_notifications(request, http_response, True)
     return http_response

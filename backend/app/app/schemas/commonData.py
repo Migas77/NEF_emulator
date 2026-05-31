@@ -308,6 +308,31 @@ Uri: TypeAlias = Annotated[
 ]
 
 
+# TS 29.122
+class InvalidParam(ExtraBaseModel):
+    """Represents the description of invalid parameters, for a request rejected due to invalid parameters."""
+
+    param: Annotated[str, Field(description="Attribute's name encoded as a JSON Pointer, or header's name.")]
+    reason: Annotated[Optional[str], Field(description='A human-readable reason, e.g. "must be a positive integer".')] = None
+
+
+# TS 29.122
+class ProblemDetails(ExtraBaseModel):
+    """Represents additional information and details on an error response."""
+
+    type: Optional[Uri] = None
+    title: Optional[str] = None
+    status: Optional[int] = None
+    detail: Optional[str] = None
+    instance: Optional[Uri] = None
+    cause: Optional[str] = None
+    invalidParams: Annotated[
+        Optional[List[InvalidParam]],
+        Field(min_items=1, description="Description of invalid parameters, for a request rejected due to invalid parameters."),
+    ] = None
+    supportedFeatures: Optional[SupportedFeatures] = None
+
+
 # TS 29.571
 Nid: TypeAlias = Annotated[
     str,
@@ -1212,21 +1237,26 @@ class AnalyticsSubset(str, Enum):
     disperClass = "DISPER_CLASS"
     ranking = "RANKING"
     percentileRanking = "PERCENTILE_RANKING"
-    rssi = "RSSI"
-    rtt = "RTT"
-    trafficInfo = "TRAFFIC_INFO"
-    numberOfUes = "NUMBER_OF_UES"
-    appListForUeComm = "APP_LIST_FOR_UE_COMM"
-    n4SessInactTimerForEuComm = "N4_SESS_INACT_TIMER_FOR_UE_COMM"
+    rssi = "RSSI"                                                                               # WLAN_PERFORMANCE
+    rtt = "RTT"                                                                                 # WLAN_PERFORMANCE
+    trafficInfo = "TRAFFIC_INFO"                                                                # WLAN_PERFORMANCE
+    numberOfUes = "NUMBER_OF_UES"                                                               # WLAN_PERFORMANCE
+    appListForUeComm = "APP_LIST_FOR_UE_COMM"                                                   # UE_COMMUNICATION
+    n4SessInactTimerForUeComm = "N4_SESS_INACT_TIMER_FOR_UE_COMM"                               # UE_COMMUNICATION
     avgTrafficRate = "AVG_TRAFFIC_RATE"
     maxTrafficRate = "MAX_TRAFFIC_RATE"
+    aggTrafficRate = "AGG_TRAFFIC_RATE"
+    varTrafficRate = "VAR_TRAFFIC_RATE"
     avgPacketDelay = "AVG_PACKET_DELAY"
     maxPacketDelay = "MAX_PACKET_DELAY"
+    varPacketDelay = "VAR_PACKET_DELAY"
     avgPacketLossRate = "AVG_PACKET_LOSS_RATE"
+    maxPacketLossRate = "MAX_PACKET_LOSS_RATE"
+    varPacketLossRate = "VAR_PACKET_LOSS_RATE"
     ueLocation = "UE_LOCATION"
     listOfHighExpUe = "LIST_OF_HIGH_EXP_UE"
     listOfMediumExpUe = "LIST_OF_MEDIUM_EXP_UE"
-    lsitOfLowExpUe = "LIST_OF_LOW_EXP_UE"
+    listOfLowExpUe = "LIST_OF_LOW_EXP_UE"
     avgUlPktDropRate = "AVG_UL_PKT_DROP_RATE"
     varUlPktDropRate = "VAR_UL_PKT_DROP_RATE"
     avgDlPktDropRate = "AVG_DL_PKT_DROP_RATE"
@@ -1235,6 +1265,29 @@ class AnalyticsSubset(str, Enum):
     varUlPktDelay = "VAR_UL_PKT_DELAY"
     avgDlPktDelay = "AVG_DL_PKT_DELAY"
     varDlPktDelay = "VAR_DL_PKT_DELAY"
+    trafficMatchTd = "TRAFFIC_MATCH_TD"
+    trafficUnmatchTd = "TRAFFIC_UNMATCH_TD"
+    numberOfUe = "NUMBER_OF_UE"
+    ueGeogDist = "UE_GEOG_DIST"
+    ueDirection = "UE_DIRECTION"
+    avgE2eUlPktDelay = "AVG_E2E_UL_PKT_DELAY"
+    varE2eUlPktDelay = "VAR_E2E_UL_PKT_DELAY"
+    avgE2eDlPktDelay = "AVG_E2E_DL_PKT_DELAY"
+    varE2eDlPktDelay = "VAR_E2E_DL_PKT_DELAY"
+    avgE2eUlPktLossRate = "AVG_E2E_UL_PKT_LOSS_RATE"
+    varE2eUlPktLossRate = "VAR_E2E_UL_PKT_LOSS_RATE"
+    avgE2eDlPktLossRate = "AVG_E2E_DL_PKT_LOSS_RATE"
+    varE2eDlPktLossRate = "VAR_E2E_DL_PKT_LOSS_RATE"
+    e2eDataVolTransTimeForUeList = "E2E_DATA_VOL_TRANS_TIME_FOR_UE_LIST"
+    numOfUe = "NUM_OF_UE"
+    movUeRatio = "MOV_UE_RATIO"
+    avrSpeed = "AVR_SPEED"
+    speedThreshold = "SPEED_THRESHOLD"
+    movUeDirection = "MOV_UE_DIRECTION"
+    inOutPercent = "IN_OUT_PERCENT"
+    timeToCollision = "TIME_TO_COLLISION"
+
+
 
 
 # TS 29.571

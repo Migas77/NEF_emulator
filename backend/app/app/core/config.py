@@ -12,9 +12,36 @@ from pydantic import (
     Field,
     HttpUrl,
     PostgresDsn,
+    confloat,
+    conint,
     parse_obj_as,
     validator,
 )
+
+
+class AnalyticsExposureBackend(Enum):
+    STUB = "stub"
+    PROMETHEUS = "prometheus"
+
+
+class AnalyticsExposureInterfaceSettings(BaseModel):
+    backend: AnalyticsExposureBackend = AnalyticsExposureBackend.STUB
+    url: str = ""
+    poll_interval: confloat(gt=0) = 10.0
+    temporal_gran_size: conint(ge=1) = 60
+    offset_period: Optional[conint(le=-1)] = None
+
+    @validator("url", always=True)
+    def validate_url(cls, v, values):
+        if not v and values["backend"] == AnalyticsExposureBackend.PROMETHEUS:
+            raise ValueError("url must be set when prometheus analytics exposure backend is in use")
+        return v
+
+    @validator("offset_period", always=True)
+    def default_offset_period(cls, v, values):
+        if v is None:
+            return -values.get("temporal_gran_size", 60)
+        return v
 
 
 class QoSInterfaceBackend(Enum):
@@ -133,6 +160,7 @@ class Settings(BaseSettings):
     REPORT_PATH: str
 
     qos: QoSInterfaceSettings = QoSInterfaceSettings()
+    analyticsExposure: AnalyticsExposureInterfaceSettings = AnalyticsExposureInterfaceSettings()
 
     class Config:
         # case_sensitive = True
