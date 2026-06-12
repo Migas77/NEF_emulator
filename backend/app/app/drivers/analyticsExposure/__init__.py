@@ -11,8 +11,8 @@ from ...interfaces.analyticsExposure.QueryServiceInterface import QueryServiceIn
 class AnalyticsExposureDriver:
     QueryArgsCls: Type[QueryArgs]
     QueryCls: Type[Query]
+    QueryBuilderCls: Type[QueryBuilderInterface]
     query_catalog: QueryCatalog
-    query_builder: QueryBuilderInterface
     query_service: QueryServiceInterface
 
 
@@ -30,8 +30,8 @@ else:
 _driver = AnalyticsExposureDriver(
     QueryArgsCls=PromQueryArgs,
     QueryCls=PromQuery,
+    QueryBuilderCls=PromQueryBuilder,
     query_catalog=PromQueryCatalog(),
-    query_builder=PromQueryBuilder(),
     query_service=_query_service,
 )
 
@@ -41,4 +41,3 @@ def get_analyticsExposure_driver() -> AnalyticsExposureDriver:
 
 
 AnalyticsExposureDep = Annotated[AnalyticsExposureDriver, Depends(get_analyticsExposure_driver)]
-

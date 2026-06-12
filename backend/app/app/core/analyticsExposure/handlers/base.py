@@ -1,5 +1,4 @@
 import logging
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta, datetime
@@ -15,7 +14,8 @@ from app.core.analyticsExposure.handlers.dispatcher import BaseDispatcher, Subsc
     FetchDispatcher
 from app.core.analyticsExposure.utilities import resolve_query_start_end_ts, get_subsc_ues, subscription_id_from_link
 from app.drivers.analyticsExposure import AnalyticsExposureDriver
-from app.interfaces.analyticsExposure.Query import QueryCatalog, Query
+from app.interfaces.analyticsExposure.Query import Query
+from app.interfaces.analyticsExposure.QueryBuilderInterface import QueryBuilderInterface
 from app.schemas import NotificationMethod
 from app.schemas.analyticsExposure import (
     AnalyticsData,
@@ -24,6 +24,7 @@ from app.schemas.analyticsExposure import (
     AnalyticsEventNotif,
     EventReportingRequirement, AnalyticsRequest
 )
+from app.schemas.analyticsExposureInternal import QueryResult
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,6 +59,8 @@ class AnalyticsHandler(ABC, Generic[T]):
     query_interval: timedelta
     query_type: QueryType
     temporal_gran_size: timedelta
+    queries: list[Query]
+    _built_queries: list[tuple[QueryBuilderInterface, QueryType]]
 
     # Subscription Path
     subscription: AnalyticsExposureSubsc | None = None
@@ -94,6 +97,8 @@ class AnalyticsHandler(ABC, Generic[T]):
         self.query_step = timedelta(seconds=temporal_gran_size)
         self.query_interval = timedelta(seconds=temporal_gran_size)
         self.query_type = QueryType.QUERY if query_start_ts == query_end_ts else QueryType.QUERY_RANGE
+        self.queries = []
+        self._built_queries = []
 
     @classmethod
     def create_for_subscription(
@@ -103,7 +108,7 @@ class AnalyticsHandler(ABC, Generic[T]):
         subscription: AnalyticsExposureSubsc,
         analytics_event_subsc: AnalyticsEventSubsc,
     ) -> "AnalyticsHandler[AnalyticsEventNotif] | None":
-        analytics_id = f"sub-{subscription_id_from_link(subscription.self)}"
+        analytics_id = f"op=sub|id={subscription_id_from_link(subscription.self)}|notifId={subscription.notifId}"
         analytics_filter = analytics_event_subsc.analyEventFilter
         extra_report_req, temporal_gran_size = (
             analytics_filter.extraReportReq or default_event_reporting_requirement(),
@@ -152,7 +157,7 @@ class AnalyticsHandler(ABC, Generic[T]):
         driver: AnalyticsExposureDriver,
         analytics_request: AnalyticsRequest
     ) -> "AnalyticsHandler[AnalyticsData] | None":
-        analytics_id = f"fetch-{uuid4()}"
+        analytics_id = f"op=fetch|id={uuid4()}"
         analy_rep = analytics_request.analyRep or default_event_reporting_requirement()
         temporal_gran_size = (
             analytics_request.analyEventFilter.temporalGranSize or DEFAULT_TEMPORAL_GRAN_SIZE
@@ -175,23 +180,17 @@ class AnalyticsHandler(ABC, Generic[T]):
 
         return handler._setup_for_fetch()
 
-    async def _execute_queries(self, prepared_queries: list[tuple[str, QueryType]]) -> list:
+    async def _execute_queries(self) -> list[QueryResult | None]:
         results = []
-        for built_query, query_type in prepared_queries:
+        for builder, query_type in self._built_queries:
             # logger.info("%s: executing query type=%s", self.analytics_id, query_type)
             if query_type == QueryType.QUERY:
-                sub_result = await self.driver.query_service.query(built_query, time=self.query_start_ts)
+                sub_result = await self.driver.query_service.query(builder, time=self.query_end_ts)
             else:
                 sub_result = await self.driver.query_service.query_range(
-                    built_query, start=self.query_start_ts + self.query_step, end=self.query_end_ts, step=self.query_step
+                    builder, start=self.query_start_ts, end=self.query_end_ts, step=self.query_step
                 )
-            if sub_result and sub_result.is_success and isinstance(sub_result.result, list):
-                results.extend(sub_result.result)
-            else:
-                logger.info("%s: query failed or returned no results", self.analytics_id)
-
-        if not results:
-            logger.info("%s: all queries returned empty", self.analytics_id)
+            results.append(sub_result)
 
         return results
 
@@ -200,12 +199,17 @@ class AnalyticsHandler(ABC, Generic[T]):
             logger.info("%s: no target UEs found, skipping", self.analytics_id)
             return None
 
-        prepared_queries = self._prepare_queries()
-        if not prepared_queries:
+        self._set_event_queries()
+        if not self.queries:
+            logger.info("%s: no queries set for event, skipping", self.analytics_id)
+            return []
+
+        self.set_built_queries()
+        if not self._built_queries:
             logger.info("%s: no queries to execute, skipping", self.analytics_id)
             return None
 
-        results = await self._execute_queries(prepared_queries)
+        results = await self._execute_queries()
         return self.dispatcher.results_to_analytics_payload(self, results)
 
     def _setup_for_subscription(self) -> "AnalyticsHandler[AnalyticsEventNotif] | None":
@@ -217,12 +221,14 @@ class AnalyticsHandler(ABC, Generic[T]):
         return self
 
     @abstractmethod
-    def _get_event_metrics(self, catalog: QueryCatalog) -> list[Query]:
+    def _set_event_queries(self) -> None:
+        """Populate self.queries with the Query catalog entries the event requires."""
         pass
 
     @abstractmethod
-    def _prepare_queries(self) -> list[tuple[str, QueryType]]:
-        """Returns a list of tuples (query_str, query_type)"""
+    def set_built_queries(self) -> None:
+        """Pair each query in self.queries with its args and using QueryBuilderInterface
+        assign the resulting (builder, query_type) pairs to self._built_queries."""
         pass
 
     @abstractmethod

@@ -9,17 +9,9 @@ from app.core.analyticsExposure.handlers import handler_for_fetch
 from app.core.analyticsExposure.subscription_analytics_poller import subscription_analytics_poller
 from app.core.analyticsExposure.utilities import get_subsc_ues
 from app.core.analyticsExposure.subscription_task_registry import subscription_task_registry
-from app.drivers.analyticsExposure import AnalyticsExposureDriver, AnalyticsExposureDep
-from app.schemas.analyticsExposure import (
-    AnalyticsEvent,
-    AnalyticsEventFilterSubsc,
-    AnalyticsEventSubsc,
-    AnalyticsExposureSubsc,
-    AnalyticsData,
-)
+from app.drivers.analyticsExposure import AnalyticsExposureDep
+from app.schemas.analyticsExposure import AnalyticsEvent
 from app.schemas.analyticsExposureInternal import AnalyticsState
-from app.schemas.commonData import WebsockNotifConfig
-from app.schemas.monitoringevent import GeographicalCoordinates, Point
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
@@ -131,6 +123,16 @@ async def create_subscription(
                 status_code=501, detail=f"Analytics Event {event_sub.analyEvent} has not been implemented"
             )
 
+        if event_sub.analyEvent == AnalyticsEvent.wlanPerformance and not (
+            event_sub.analyEventFilter
+            and event_sub.analyEventFilter.appServerAddrs and len(event_sub.analyEventFilter.appServerAddrs) == 1
+            and event_sub.analyEventFilter.appServerAddrs[0].ipAddr and event_sub.analyEventFilter.appServerAddrs[0].ipAddr.ipv4Addr
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="appServerAddrs with exactly 1 ipv4 entry is required for WLAN_PERFORMANCE event",
+            )
+
         if not (
             event_sub.tgtUe
             and any(
@@ -179,6 +181,7 @@ async def create_subscription(
         event=db_event
     )
 
+    logger.info("id=%s|notifId=%s: subscription created for user %s", subscription_id_str, item_in.notifId, current_user.id)
     http_response = JSONResponse(
         content=updated_doc, status_code=201, headers=response_header
     )
@@ -234,6 +237,16 @@ def update_subscription(
                 status_code=501, detail=f"Analytics Event {event_sub.analyEvent} has not been implemented"
             )
 
+        if event_sub.analyEvent == AnalyticsEvent.wlanPerformance and not (
+            event_sub.analyEventFilter
+            and event_sub.analyEventFilter.appServerAddrs and len(event_sub.analyEventFilter.appServerAddrs) == 1
+            and event_sub.analyEventFilter.appServerAddrs[0].ipAddr and event_sub.analyEventFilter.appServerAddrs[0].ipAddr.ipv4Addr
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="appServerAddrs with exactly 1 ipv4 entry is required for WLAN_PERFORMANCE event",
+            )
+
         if not (
             event_sub.tgtUe
             and any(
@@ -263,7 +276,7 @@ def update_subscription(
     if not task.done() and db_event is not None:
         db_event.set()
 
-    logger.info("Updated subscription %s for user %s", subscriptionId, current_user.id)
+    logger.info("id=%s|notifId=%s: subscription updated for user %s", subscriptionId, item_in.notifId, current_user.id)
     http_response = JSONResponse(content=updated_doc, status_code=200)
     add_notifications(http_request, http_response, False)
     return http_response
@@ -308,7 +321,7 @@ def read_subscription(
         raise HTTPException(status_code=400, detail="Not enough permissions")
 
     retrieved_doc.pop("owner_id")
-    logger.info("Read subscription %s for user %s", subscriptionId, current_user.id)
+    logger.info("id=%s|notifId=%s: subscription read for user %s", subscriptionId, retrieved_doc["notifId"], current_user.id)
     http_response = JSONResponse(content=retrieved_doc, status_code=200)
     add_notifications(http_request, http_response, False)
     return http_response
@@ -358,7 +371,7 @@ def delete_subscription(
     if not task.done() and db_event is not None:
         db_event.set()
 
-    logger.info("Deleted subscription %s for user %s", subscriptionId, current_user.id)
+    logger.info("id=%s|notifId=%s: subscription deleted for user %s", subscriptionId, retrieved_doc["notifId"], current_user.id)
     return Response(status_code=204)
 
 
@@ -388,6 +401,16 @@ async def fetch_analytics(
     if item_in.analyEvent not in supported_subscription_events:
         raise HTTPException(
             status_code=501, detail=f"Analytics Event {item_in.analyEvent} has not been implemented"
+        )
+
+    if item_in.analyEvent == AnalyticsEvent.wlanPerformance and not (
+        item_in.analyEventFilter
+        and item_in.analyEventFilter.appServerAddrs and len(item_in.analyEventFilter.appServerAddrs) == 1
+        and item_in.analyEventFilter.appServerAddrs[0].ipAddr and item_in.analyEventFilter.appServerAddrs[0].ipAddr.ipv4Addr
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="appServerAddrs with exactly 1 ipv4 entry is required for WLAN_PERFORMANCE event",
         )
 
     if not (

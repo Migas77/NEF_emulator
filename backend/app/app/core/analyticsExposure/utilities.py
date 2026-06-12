@@ -78,6 +78,9 @@ def population_variance(values: Collection[float]) -> float | None:
     mean = sum(values) / n
     return sum((x - mean) ** 2 for x in values) / n
 
+def compute_mean(values: Collection) -> float:
+    return sum(values) / len(values)
+
 
 def subscription_id_from_link(link: str) -> str:
     return link.rstrip("/").rsplit("/", 1)[-1]

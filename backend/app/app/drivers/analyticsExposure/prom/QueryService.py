@@ -1,29 +1,17 @@
 import logging
+
 import httpx
 from datetime import datetime, timedelta
+
+from pydantic.tools import parse_obj_as
+
+from app.interfaces.analyticsExposure.QueryBuilderInterface import QueryBuilderInterface
 from app.interfaces.analyticsExposure.QueryServiceInterface import QueryServiceInterface
-from app.schemas.analyticsExposureInternal import VectorQueryResult, MatrixQueryResult, ScalarQueryResult, \
-    StringQueryResult, QueryResult
+from app.schemas.analyticsExposureInternal import QueryResult
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
-
-
-def _parse_result(content: dict) -> QueryResult | None:
-    data = content["data"]
-    result_type = data["resultType"]
-    payload = {"status": content["status"], "result_type": result_type, "result": data["result"]}
-    if result_type == "vector":
-        return VectorQueryResult(**payload)
-    if result_type == "matrix":
-        return MatrixQueryResult(**payload)
-    if result_type == "scalar":
-        return ScalarQueryResult(**payload)
-    if result_type == "string":
-        return StringQueryResult(**payload)
-    logger.warning("Unsupported Prometheus resultType: %s", result_type)
-    return None
 
 
 class PromQueryService(QueryServiceInterface):
@@ -35,28 +23,34 @@ class PromQueryService(QueryServiceInterface):
         )
 
     async def query(self,
-        query: str,
+        builder: QueryBuilderInterface,
         *,
-        time: datetime | None = None,
+        time: datetime,
         timeout: timedelta | None = None,
         limit: int | None = None,
         lookback_delta: float | None = None,
         stats: str | None = None,
         request_timeout: float = httpx.USE_CLIENT_DEFAULT
     ) -> QueryResult | None:
-        params = {"query": query}
-        params |= {"time": time.timestamp()} if time else {}
-        logger.info("Prometheus Point Query: %s at time %s", query, time)
+        query_str = builder.build()
+        logger.debug("Prometheus Point Query: %s at time %s", query_str, time)
+
+        params = {"query": query_str, "time": time.timestamp()}
         resp = await self.__httpx_client.get("/api/v1/query", params=params, timeout=request_timeout)
 
         if resp.status_code != 200:
             logger.critical("Error while querying Prometheus (status code: %d): %s", resp.status_code, resp.text)
             return None
 
-        return _parse_result(resp.json())
+        content = resp.json()
+        if content.get("status") != "success":
+            logger.critical("Prometheus query failed: %s", content)
+            return None
+
+        return parse_obj_as(QueryResult, content)
 
     async def query_range(self,
-        query: str,
+        builder: QueryBuilderInterface,
         *,
         start: datetime,
         end: datetime,
@@ -67,9 +61,11 @@ class PromQueryService(QueryServiceInterface):
         stats: str | None = None,
         request_timeout: float = httpx.USE_CLIENT_DEFAULT,
     ) -> QueryResult | None:
-        logger.info("Prometheus Query Range: %s from %s to %s with step %s", query, start, end, step)
+        query_str = builder.build()
+        logger.debug("Prometheus Query Range: %s from %s to %s with step %s", query_str, start, end, step)
+
         resp = await self.__httpx_client.get("/api/v1/query_range", params={
-            "query": query, "start": start.timestamp(), "end": end.timestamp(),
+            "query": query_str, "start": start.timestamp(), "end": end.timestamp(),
             "step": timedelta_to_prom_duration(step)
         }, timeout=request_timeout)
 
@@ -77,7 +73,12 @@ class PromQueryService(QueryServiceInterface):
             logger.critical("Error while querying Prometheus (status code: %d): %s", resp.status_code, resp.text)
             return None
 
-        return _parse_result(resp.json())
+        content = resp.json()
+        if content.get("status") != "success":
+            logger.critical("Prometheus query failed: %s", content)
+            return None
+
+        return parse_obj_as(QueryResult, content)
 
 
 def timedelta_to_prom_duration(td: timedelta) -> str:

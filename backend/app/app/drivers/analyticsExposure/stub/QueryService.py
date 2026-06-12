@@ -1,30 +1,27 @@
-import re
 import random
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from app.crud import ue as crud_ue, application as crud_app
+from app.interfaces.analyticsExposure.Query import QueryArgs
+from app.interfaces.analyticsExposure.QueryBuilderInterface import QueryBuilderInterface
 from app.interfaces.analyticsExposure.QueryServiceInterface import QueryServiceInterface
 from app.schemas.analyticsExposureInternal import (
-    QueryResult, VectorQueryResult, MatrixQueryResult,
-    VectorEntry, MatrixEntry,
+    QueryResult, VectorQueryData, MatrixQueryData,
+    VectorResult, MatrixResult,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _parse_sub_query(sub_q: str) -> dict:
-    type_match = re.search(r'label_replace\(.*?,\s*"type",\s*"([^"]+)"', sub_q)
-    metric_type = type_match.group(1) if type_match else 'UNKNOWN'
-
-    src_ip_match = re.search(r'src_ip=~"([^"]*)"', sub_q)
-    src_ips = [ip for ip in src_ip_match.group(1).split('|') if ip] if src_ip_match else []
-
-    dst_ip_match = re.search(r'dst_ip=~"([^"]*)"', sub_q)
-    dst_ips = [ip for ip in dst_ip_match.group(1).split('|') if ip] if dst_ip_match else []
-
-    return {'type': metric_type, 'src_ips': src_ips, 'dst_ips': dst_ips}
+def _parse_sub_query(metric_type: str, args: QueryArgs) -> tuple[str, list[str], list[str]]:
+    app_ips = [str(ip) for ip in args.raw_app_ips]
+    ue_ips  = [str(ip) for ip in args.raw_ue_ips]
+    if "UL" in metric_type:
+        return metric_type, ue_ips, app_ips
+    else:
+        return metric_type, app_ips, ue_ips
 
 
 def _stub_value(metric_type: str) -> float:
@@ -55,39 +52,34 @@ def _build_metric(mtype: str, src_ip: str | None, dst_ip: str | None,
     return metric
 
 
-def _vector_entries_for(seg: dict, ts: float, ip_to_mac: dict[str, str]) -> list[VectorEntry]:
-    mtype, src_ips, dst_ips = seg['type'], seg['src_ips'], seg['dst_ips']
+def _vector_entries_for(mtype: str, src_ips: list[str], dst_ips: list[str], ts: float, ip_to_mac: dict[str, str]) -> list[VectorResult]:
     entries = []
     if src_ips and dst_ips:
         for src_ip in src_ips:
             for dst_ip in dst_ips:
-                entries.append(VectorEntry(
-                    metric=_build_metric(mtype, src_ip, dst_ip, ip_to_mac),
-                    value=(ts, str(_stub_value(mtype))),
+                entries.append(VectorResult(
+                    metric=_build_metric(mtype, src_ip, dst_ip, ip_to_mac), value=(ts, str(_stub_value(mtype)))
                 ))
     elif src_ips:
         for src_ip in src_ips:
-            entries.append(VectorEntry(
-                metric=_build_metric(mtype, src_ip, None, ip_to_mac),
-                value=(ts, str(_stub_value(mtype))),
+            entries.append(VectorResult(metric=_build_metric(
+                mtype, src_ip, None, ip_to_mac), value=(ts, str(_stub_value(mtype)))
             ))
     elif dst_ips:
         for dst_ip in dst_ips:
-            entries.append(VectorEntry(
-                metric=_build_metric(mtype, None, dst_ip, ip_to_mac),
-                value=(ts, str(_stub_value(mtype))),
+            entries.append(VectorResult(metric=_build_metric(
+                mtype, None, dst_ip, ip_to_mac), value=(ts, str(_stub_value(mtype)))
             ))
     else:
-        entries.append(VectorEntry(
-            metric=_build_metric(mtype, None, None, ip_to_mac),
-            value=(ts, str(_stub_value(mtype))),
+        entries.append(VectorResult(metric=_build_metric(
+            mtype, None, None, ip_to_mac), value=(ts, str(_stub_value(mtype)))
         ))
     return entries
 
 
-def _matrix_entries_for(seg: dict, timestamps: list[float], ip_to_mac: dict[str, str]) -> list[MatrixEntry]:
-    mtype, src_ips, dst_ips = seg['type'], seg['src_ips'], seg['dst_ips']
-
+def _matrix_entries_for(
+    mtype: str, src_ips: list[str], dst_ips: list[str], timestamps: list[float], ip_to_mac: dict[str, str]
+) -> list[MatrixResult]:
     def make_values() -> list[tuple[float, str]]:
         return [(ts, str(_stub_value(mtype))) for ts in timestamps]
 
@@ -95,27 +87,16 @@ def _matrix_entries_for(seg: dict, timestamps: list[float], ip_to_mac: dict[str,
     if src_ips and dst_ips:
         for src_ip in src_ips:
             for dst_ip in dst_ips:
-                entries.append(MatrixEntry(
-                    metric=_build_metric(mtype, src_ip, dst_ip, ip_to_mac),
-                    values=make_values(),
-                ))
+                entries.append(MatrixResult(metric=_build_metric(mtype, src_ip, dst_ip, ip_to_mac), values=make_values()))
     elif src_ips:
         for src_ip in src_ips:
-            entries.append(MatrixEntry(
-                metric=_build_metric(mtype, src_ip, None, ip_to_mac),
-                values=make_values(),
-            ))
+            entries.append(MatrixResult(metric=_build_metric(mtype, src_ip, None, ip_to_mac), values=make_values()))
     elif dst_ips:
         for dst_ip in dst_ips:
-            entries.append(MatrixEntry(
-                metric=_build_metric(mtype, None, dst_ip, ip_to_mac),
-                values=make_values(),
-            ))
+            entries.append(MatrixResult(metric=_build_metric(mtype, None, dst_ip, ip_to_mac), values=make_values()))
     else:
-        entries.append(MatrixEntry(
-            metric=_build_metric(mtype, None, None, ip_to_mac),
-            values=make_values(),
-        ))
+        entries.append(MatrixResult(metric=_build_metric(mtype, None, None, ip_to_mac), values=make_values()))
+
     return entries
 
 
@@ -139,28 +120,28 @@ class StubQueryService(QueryServiceInterface):
             db.close()
 
     async def query(self,
-        query: str, *, time: datetime | None = None, timeout: timedelta | None = None,
+        builder: QueryBuilderInterface, *, time: datetime | None = None, timeout: timedelta | None = None,
         limit: int | None = None, lookback_delta: float | None = None, stats: str | None = None,
         request_timeout: float | None = 30.0
     ) -> QueryResult | None:
+        logger.debug("Stub Point Query at time %s", time)
         ip_to_mac = self._get_ip_to_mac()
-        entries: list[VectorEntry] = []
         now_ts = (time or datetime.now(timezone.utc)).timestamp()
-        for sub_q in query.split(' or '):
-            entries.extend(_vector_entries_for(_parse_sub_query(sub_q.strip()), now_ts, ip_to_mac))
-        logger.debug("Stub query: returning vector entries %s", entries)
-        return VectorQueryResult(status='success', result_type='vector', result=entries)
+        entries: list[VectorResult] = []
+        for metric_type, (_, args) in builder.queries.items():
+            mtype, src_ips, dst_ips = _parse_sub_query(metric_type, args)
+            entries.extend(_vector_entries_for(mtype, src_ips, dst_ips, now_ts, ip_to_mac))
+        return QueryResult(status='success', data=VectorQueryData(resultType='vector', result=entries))
 
     async def query_range(self,
-        query: str, *, start: datetime, end: datetime, step: timedelta,
+        builder: QueryBuilderInterface, *, start: datetime, end: datetime, step: timedelta,
         timeout: timedelta | None = None,
         limit: int | None = None, lookback_delta: float | None = None, stats: str | None = None,
         request_timeout: float | None = 30.0
     ) -> QueryResult | None:
+        logger.info("Stub Query Range from %s to %s with step %s", start, end, step)
         ip_to_mac = self._get_ip_to_mac()
-        entries: list[MatrixEntry] = []
         timestamps: list[float] = []
-
         current = start
         while current <= end:
             timestamps.append(current.timestamp())
@@ -168,8 +149,10 @@ class StubQueryService(QueryServiceInterface):
         if not timestamps:
             timestamps = [end.timestamp()]
 
-        for sub_q in query.split(' or '):
-            entries.extend(_matrix_entries_for(_parse_sub_query(sub_q.strip()), timestamps, ip_to_mac))
-
+        entries: list[MatrixResult] = []
+        for metric_type, (_, args) in builder.queries.items():
+            mtype, src_ips, dst_ips = _parse_sub_query(metric_type, args)
+            entries.extend(_matrix_entries_for(mtype, src_ips, dst_ips, timestamps, ip_to_mac))
         logger.debug("Stub query_range: returning matrix entries %s over timestamps %s", entries, timestamps)
-        return MatrixQueryResult(status='success', result_type='matrix', result=entries)
+        return QueryResult(status='success', data=MatrixQueryData(resultType='matrix', result=entries))
+

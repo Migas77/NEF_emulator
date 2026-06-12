@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from abc import ABC, abstractmethod
 
+from app.interfaces.analyticsExposure.QueryBuilderInterface import QueryBuilderInterface
 from app.schemas.analyticsExposureInternal import QueryResult
 
 
@@ -9,9 +10,9 @@ class QueryServiceInterface(ABC):
 
     @abstractmethod
     async def query(self,
-        query: str,
+        builder: QueryBuilderInterface,
         *,
-        time: datetime | None = None,
+        time: datetime,
         timeout: timedelta | None = None,
         limit: int | None = None,
         lookback_delta: float | None = None,
@@ -22,7 +23,7 @@ class QueryServiceInterface(ABC):
 
     @abstractmethod
     async def query_range(self,
-        query: str,
+        builder: QueryBuilderInterface,
         *,
         start: datetime,
         end: datetime,

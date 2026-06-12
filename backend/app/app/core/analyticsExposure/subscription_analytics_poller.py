@@ -54,35 +54,34 @@ class SubscriptionAnalyticsPoller:
         subscription_id: str,
         db_event: asyncio.Event,
     ) -> None:
-        logger.info("Starting poller for subscription %s", subscription_id)
-
         subscription = self._load_subscription(db_mongo, subscription_id)
         if subscription is None:
             logger.error("Subscription %s not found", subscription_id)
             return
 
+        logger.info("id=%s|notifId=%s: starting poller", subscription_id, subscription.notifId)
         send_notif, poll_interval = self._resolve_notification_strategy(subscription)
         loop = asyncio.get_running_loop()
         poll_state = _PollerState(next_poll_time=loop.time())
 
         while True:
-            logger.info("Polling for subscription %s", subscription_id)
+            logger.info("id=%s|notifId=%s: polling", subscription_id, subscription.notifId)
 
             if db_event.is_set():
                 subscription = self._load_subscription(db_mongo, subscription_id)
                 if subscription is None:
-                    logger.info("Subscription %s deleted, stopping poller", subscription_id)
+                    logger.info("id=%s: subscription deleted, stopping poller", subscription_id)
                     return
                 send_notif, poll_interval = self._resolve_notification_strategy(subscription)
                 db_event.clear()
 
             if self._subscription_limits_reached(subscription):
-                logger.info("Subscription %s limits reached, stopping poller", subscription_id)
+                logger.info("id=%s|notifId=%s: limits reached, stopping poller", subscription_id, subscription.notifId)
                 crud_mongo.update_new_field(db_mongo, db_collection, subscription_id, {"state.is_active": False})
                 return
 
             notifs = await self._collect_event_notifs(db_sql, subscription)
-            logger.info("Subscription %s collected %d notifs", subscription_id, len(notifs))
+            logger.info("id=%s|notifId=%s: collected %d notifs", subscription_id, subscription.notifId, len(notifs))
             if notifs:
                 report = AnalyticsEventNotification(
                     notifId=subscription.notifId,
@@ -95,7 +94,7 @@ class SubscriptionAnalyticsPoller:
                 })
 
             if poll_state.stop_loop:
-                logger.info("Subscription %s stop condition fulfilled, stopping poller", subscription_id)
+                logger.info("id=%s|notifId=%s: stop condition fulfilled, stopping poller", subscription_id, subscription.notifId)
                 crud_mongo.update_new_field(db_mongo, db_collection, subscription_id, {"state.is_active": False})
                 return
 
@@ -104,8 +103,8 @@ class SubscriptionAnalyticsPoller:
             if sleep_for > 0.0:
                 await asyncio.sleep(sleep_for)
             else:
-                logger.warning("Subscription %s poll took longer than poll_interval, "
-                                "skipping to next deadline", subscription_id)
+                logger.warning("id=%s|notifId=%s: poll took longer than poll_interval, "
+                               "skipping to next deadline", subscription_id, subscription.notifId)
                 poll_state.next_poll_time = loop.time() + poll_interval
 
     async def _collect_event_notifs(
@@ -129,10 +128,10 @@ class SubscriptionAnalyticsPoller:
         if rep_info.monDur is not None:
             mon_dur = rep_info.monDur if rep_info.monDur.tzinfo is not None else rep_info.monDur.replace(tzinfo=timezone.utc)
             if datetime.now(timezone.utc) >= mon_dur:
-                logger.info("Subscription %s monitoring duration expired", sub_id)
+                logger.info("id=%s|notifId=%s: monitoring duration expired", sub_id, subscription.notifId)
                 return True
         if rep_info.maxReportNbr is not None and 0 < rep_info.maxReportNbr <= subscription.state.report_count:
-            logger.info("Subscription %s max report number (%d) reached", sub_id, rep_info.maxReportNbr)
+            logger.info("id=%s|notifId=%s: max report number (%d) reached", sub_id, subscription.notifId, rep_info.maxReportNbr)
             return True
         return False
 
@@ -151,7 +150,7 @@ class SubscriptionAnalyticsPoller:
             analytics_event_subsc=event_sub,
         )
         if handler is None:
-            logger.info("Subscription %s: no handler for event %s, skipping", sub_id, event_sub.analyEvent)
+            logger.info("id=%s|notifId=%s: no handler for event %s, skipping", sub_id, subscription.notifId, event_sub.analyEvent)
             return None
 
         return await handler.get_analytics()

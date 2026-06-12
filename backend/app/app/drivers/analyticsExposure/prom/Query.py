@@ -18,13 +18,13 @@ class PromQueryArgs(QueryArgs):
 
     @override
     @property
-    def src_ips(self) -> str:
-        return self._ips_regex(self.raw_src_ips)
+    def app_ips(self) -> str:
+        return self._ips_regex(self.raw_app_ips)
 
     @override
     @property
-    def dst_ips(self) -> str:
-        return self._ips_regex(self.raw_dst_ips)
+    def ue_ips(self) -> str:
+        return self._ips_regex(self.raw_ue_ips)
 
 
 
@@ -51,62 +51,62 @@ class PromQueryCatalog(QueryCatalog):
     # UE_COMMUNICATION
     UE_UL_VOL_PER_FLOW_BYTES_QUERY = PromQuery(
         expr='sum by (src_ip, dst_ip, src_mac, dst_mac, proto) (increase(tap_5g_atnog_throughput_bytes_total{{'
-                'src_ip=~"{src_ips}", dst_ip=~"{dst_ips}"'
+                'src_ip=~"{ue_ips}", dst_ip=~"{app_ips}"'
              '}}[{interval}]))',
         type='UE_UL_VOL_PER_FLOW_BYTES_QUERY'
     )
     UE_DL_VOL_PER_FLOW_BYTES_QUERY = PromQuery(
         expr='sum by (src_ip, dst_ip, src_mac, dst_mac, proto) (increase(tap_5g_atnog_throughput_bytes_total{{'
-                'src_ip=~"{src_ips}", dst_ip=~"{dst_ips}"'
+                'src_ip=~"{app_ips}", dst_ip=~"{ue_ips}"'
              '}}[{interval}]))',
         type='UE_DL_VOL_PER_FLOW_BYTES_QUERY'
     )
     # WLAN_PERFORMANCE
     UE_UL_THR_PER_SRC_IP_BPS_QUERY = PromQuery(
         expr='8 * sum by (src_ip) (rate(tap_5g_atnog_throughput_bytes_total{{'
-                'src_ip=~"{src_ips}"'
+                'src_ip=~"{ue_ips}", dst_ip=~"{app_ips}"'
              '}}[{interval}]))',
         type='UE_UL_THR_PER_SRC_IP_BPS_QUERY'
     )
     UE_DL_THR_PER_DST_IP_BPS_QUERY = PromQuery(
         expr='8 * sum by (dst_ip) (rate(tap_5g_atnog_throughput_bytes_total{{'
-                'dst_ip=~"{dst_ips}"'
+                'src_ip=~"{app_ips}", dst_ip=~"{ue_ips}"'
              '}}[{interval}]))',
         type='UE_DL_THR_PER_DST_IP_BPS_QUERY'
     )
     UE_UL_VOL_PER_SRC_IP_BYTES_QUERY = PromQuery(
         expr='sum by (src_ip) (increase(tap_5g_atnog_throughput_bytes_total{{'
-                'src_ip=~"{src_ips}", dst_ip=~"{dst_ips}"'
+                'src_ip=~"{ue_ips}", dst_ip=~"{app_ips}"'
              '}}[{interval}]))',
         type='UE_UL_VOL_PER_SRC_IP_BYTES_QUERY'
     )
     UE_DL_VOL_PER_DST_IP_BYTES_QUERY = PromQuery(
         expr='sum by (dst_ip) (increase(tap_5g_atnog_throughput_bytes_total{{'
-                'src_ip=~"{src_ips}", dst_ip=~"{dst_ips}"'
+                'src_ip=~"{app_ips}", dst_ip=~"{ue_ips}"'
              '}}[{interval}]))',
         type='UE_DL_VOL_PER_DST_IP_BYTES_QUERY'
     )
     ALL_UE_UL_THR_PER_APP_IP_BPS_QUERY = PromQuery(
-        expr='8 * sum(rate(tap_5g_atnog_throughput_bytes_total{{'
-                'dst_ip=~"{dst_ips}"'
+        expr='8 * sum by (dst_ip) (rate(tap_5g_atnog_throughput_bytes_total{{'
+                'dst_ip=~"{app_ips}"'
              '}}[{interval}]))',
         type='ALL_UE_UL_THR_PER_APP_IP_BPS_QUERY'
     )
     ALL_UE_DL_THR_PER_APP_IP_BPS_QUERY = PromQuery(
-        expr='8 * sum(rate(tap_5g_atnog_throughput_bytes_total{{'
-                'src_ip=~"{src_ips}"'
+        expr='8 * sum by (src_ip) (rate(tap_5g_atnog_throughput_bytes_total{{'
+                'src_ip=~"{app_ips}"'
              '}}[{interval}]))',
         type='ALL_UE_DL_THR_PER_APP_IP_BPS_QUERY'
     )
     ALL_UE_UL_VOL_PER_APP_IP_BYTES_QUERY = PromQuery(
-        expr='sum(increase(tap_5g_atnog_throughput_bytes_total{{'
-                'dst_ip=~"{dst_ips}"'
+        expr='sum by (dst_ip) (increase(tap_5g_atnog_throughput_bytes_total{{'
+                'dst_ip=~"{app_ips}"'
              '}}[{interval}]))',
         type='ALL_UE_UL_VOL_PER_APP_IP_BYTES_QUERY'
     )
     ALL_UE_DL_VOL_PER_APP_IP_BYTES_QUERY = PromQuery(
-        expr='sum(increase(tap_5g_atnog_throughput_bytes_total{{'
-                'src_ip=~"{src_ips}"'
+        expr='sum by (src_ip) (increase(tap_5g_atnog_throughput_bytes_total{{'
+                'src_ip=~"{app_ips}"'
              '}}[{interval}]))',
         type='ALL_UE_DL_VOL_PER_APP_IP_BYTES_QUERY'
     )

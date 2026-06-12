@@ -6,8 +6,7 @@ This module contains two categories of types that are not part of the 3GPP stand
   1. CUSTOM INTERNAL TYPES (for runtime state)
   2. PROMETHEUS API RESULT MODELS
 """
-
-from typing import Literal, Union
+from typing import Literal, Union, Annotated
 
 from pydantic import BaseModel, Field
 
@@ -39,50 +38,60 @@ class AnalyticsExposureSubscWithState(AnalyticsExposureSubsc):
 #   "string"  → tuple[float, str]   (string literal)
 # =============================================================================
 
-class VectorEntry(BaseModel):
+class VectorResult(BaseModel):
     """Single entry in a Prometheus instant-vector result (resultType: "vector")."""
-    metric: dict[str, str]
-    value: tuple[float, str]          # [unix_time, "sample_value"]
-
-
-class MatrixEntry(BaseModel):
-    """Single entry in a Prometheus range-vector result (resultType: "matrix")."""
-    metric: dict[str, str]
-    values: list[tuple[float, str]]   # [[unix_time, "sample_value"], ...]
-
-
-class _QueryResultBase(BaseModel):
-    """Base class for all Prometheus query results, containing common fields."""
-    status: str
+    metric: dict[str, str]                      # { label_name: label_value, ... }
+    value: tuple[float, str]                    # ( unix_time, "sample_value" )
 
     @property
-    def is_success(self) -> bool:
-        return self.status == "success"
+    def values(self) -> list[tuple[float, str]]:
+        return [self.value]
 
 
-class VectorQueryResult(_QueryResultBase):
+class MatrixResult(BaseModel):
+    """Single entry in a Prometheus range-vector result (resultType: "matrix")."""
+    metric: dict[str, str]                      # { label_name: label_value, ... }
+    values: list[tuple[float, str]]             # [ ( unix_time, "sample_value" ), ...]
+
+
+class BaseQueryData(BaseModel):
+    """Base class for the 'data' field in Prometheus query results, containing common fields."""
+    resultType: Literal["vector", "matrix", "scalar", "string"]
+    result: list[VectorResult] | list[MatrixResult] | tuple[float, str]
+
+
+class VectorQueryData(BaseQueryData):
     """Result of a Prometheus instant-vector query (resultType: "vector")."""
-    result_type: Literal["vector"]
-    result: list[VectorEntry]
+    resultType: Literal["vector"]
+    result: list[VectorResult]
 
 
-class MatrixQueryResult(_QueryResultBase):
+class MatrixQueryData(BaseQueryData):
     """Result of a Prometheus range-vector query (resultType: "matrix")."""
-    result_type: Literal["matrix"]
-    result: list[MatrixEntry]
+    resultType: Literal["matrix"]
+    result: list[MatrixResult]
 
 
-class ScalarQueryResult(_QueryResultBase):
+class ScalarQueryData(BaseQueryData):
     """Result of a Prometheus scalar expression query (resultType: "scalar")."""
-    result_type: Literal["scalar"]
+    resultType: Literal["scalar"]
     result: tuple[float, str]
 
 
-class StringQueryResult(_QueryResultBase):
+class StringQueryData(BaseQueryData):
     """Result of a Prometheus string literal query (resultType: "string")."""
-    result_type: Literal["string"]
+    resultType: Literal["string"]
     result: tuple[float, str]
 
 
-QueryResult = Union[VectorQueryResult, MatrixQueryResult, ScalarQueryResult, StringQueryResult]
+QueryData = Annotated[
+    Union[VectorQueryData, MatrixQueryData, ScalarQueryData, StringQueryData],
+    Field(discriminator="resultType")
+]
+
+
+class QueryResult(BaseModel):
+    """Class for all Prometheus query results."""
+    status: str
+    data: QueryData
 

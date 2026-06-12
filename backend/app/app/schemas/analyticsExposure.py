@@ -21,7 +21,7 @@ from .commonData import (
     PartitioningCriteria,
     NotificationFlag,
     WebsockNotifConfig, SamplingRatio, DurationSec, Uinteger, BitRate, PacketDelBudget, PacketErrRate,
-    SupportedFeatures, Volume,
+    SupportedFeatures, Volume, IpAddr,
 )
 from .cpParameterProvisioning import ScheduledCommunicationTime, StationaryIndication, ScheduledCommunicationType
 from .utils import ExtraBaseModel
@@ -33,7 +33,7 @@ from .utils import ExtraBaseModel
 class AddrFqdn(ExtraBaseModel):
     """IP address and/or FQDN."""
 
-    ipAddr: IPvAnyAddress
+    ipAddr: IpAddr = Field(None)
     fqdn: str = Field(None, description="Indicates an FQDN.")
 
 
@@ -840,16 +840,16 @@ class EventReportingRequirement(ExtraBaseModel):
     anaMetaInd: Optional[AnalyticsMetadataIndication] = Field(None)
     histAnaTimePeriod: Optional[TimeWindow] = Field(None)
 
-    @validator("offsetPeriod")
-    def offset_period_must_be_negative(cls, v):
-        if v is not None and v >= 0:
-            raise ValueError('The "offsetPeriod" attribute shall be a negative value. Predictions not implemented')
-        return v
-
     @validator("startTs", "endTs")
     def start_end_ts_must_be_in_past(cls, v):
         if v is not None and v > datetime.now(timezone.utc):
             raise ValueError('The "startTs" and "endTs" attributes shall be a value in the past. Predictions not implemented')
+        return v
+
+    @validator("offsetPeriod")
+    def offset_period_must_be_negative(cls, v):
+        if v is not None and v >= 0:
+            raise ValueError('The "offsetPeriod" attribute shall be a negative value. Predictions not implemented')
         return v
 
     @root_validator(skip_on_failure=True)
@@ -859,13 +859,21 @@ class EventReportingRequirement(ExtraBaseModel):
         return v
 
     @root_validator(skip_on_failure=True)
-    def validate_endTs__startTs(cls, v):
-        start, end = v.get("startTs"), v.get("endTs")
+    def validate_endTs_startTs(cls, v):
+        # If none of startTs, endTs, or offsetPeriod is provided, the target period starts
+        # at the present time with no specified end.
+        start, end, offsetPeriod = v.get("startTs"), v.get("endTs"), v.get("offsetPeriod")
+        if offsetPeriod:
+            return v
         if end is not None:
             if start is None:
                 raise ValueError('"endTs" shall not be provided without "startTs". Predictions not implemented')
             elif end < start:
                 raise ValueError('"endTs" shall not be less than "startTs".')
+        else:
+            if start is None:
+                now = datetime.now(timezone.utc)
+                v["startTs"] = now
         return v
 
 class NetworkPerfOrderCriterion(str, Enum):
@@ -1708,7 +1716,7 @@ class AnalyticsExposureSubsc(ExtraBaseModel):
         None,
         description="Set to true by the AF to request the NEF to send a test notification as defined in clause 5.2.5.3 of 3GPP TS 29.122. Set to false or omitted otherwise.",
     )
-    websockNotifConfig: WebsockNotifConfig
+    websockNotifConfig: Optional[WebsockNotifConfig]
 
 
     class Config:

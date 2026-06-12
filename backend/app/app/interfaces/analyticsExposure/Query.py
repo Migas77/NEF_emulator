@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from functools import cached_property
 from typing import Any
 
 from pydantic import BaseModel, Field, IPvAnyAddress
@@ -9,8 +10,8 @@ from typing_extensions import override
 
 class QueryArgs(BaseModel):
     raw_interval: timedelta
-    raw_src_ips: set[IPvAnyAddress] = Field(default_factory=set)
-    raw_dst_ips: set[IPvAnyAddress] = Field(default_factory=set)
+    raw_app_ips: set[IPvAnyAddress] = Field(default_factory=set)
+    raw_ue_ips: set[IPvAnyAddress] = Field(default_factory=set)
 
     @property
     @abstractmethod
@@ -19,12 +20,12 @@ class QueryArgs(BaseModel):
 
     @property
     @abstractmethod
-    def src_ips(self) -> Any:
+    def app_ips(self) -> Any:
         pass
 
     @property
     @abstractmethod
-    def dst_ips(self) -> Any:
+    def ue_ips(self) -> Any:
         pass
 
     @override
@@ -32,8 +33,8 @@ class QueryArgs(BaseModel):
         result = super().dict(**kwargs)
         pairs = [
             ('raw_interval', 'interval'),
-            ('raw_src_ips', 'src_ips'),
-            ('raw_dst_ips', 'dst_ips'),
+            ('raw_app_ips', 'app_ips'),
+            ('raw_ue_ips',  'ue_ips'),
         ]
         for old, new in pairs:
             result[new] = result.pop(old)
@@ -45,8 +46,8 @@ class Query(BaseModel):
     type: str
 
 class QueryCatalog:
-    # UL: src_ip=UEs  →  dst_ip=app
-    # DL: src_ip=app  →  dst_ip=UEs 
+    # UL: src_ip=ue_ips  →  dst_ip=app_ips
+    # DL: src_ip=app_ips →  dst_ip=ue_ips
     
     # WLAN_PERFORMANCE
     UE_UL_THR_PER_SRC_IP_BPS_QUERY: Query = Query(expr='', type='UE_UL_THR_PER_SRC_IP_BPS_QUERY')

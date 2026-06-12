@@ -5,11 +5,9 @@ from datetime import datetime, timezone, timedelta
 from typing_extensions import override
 
 from app.core.analyticsExposure.handlers.base import AnalyticsHandler, QueryType
-from app.core.analyticsExposure.utilities import population_variance, subscription_id_from_link
+from app.core.analyticsExposure.utilities import population_variance, compute_mean
 from app.crud import application as crud_app
 from app.models.application import Application
-from app.drivers.analyticsExposure import AnalyticsExposureDriver
-from app.interfaces.analyticsExposure.Query import QueryCatalog, Query
 from app.schemas.analyticsExposure import (
     AnalyticsData,
     AnalyticsEvent,
@@ -25,7 +23,7 @@ from app.schemas.analyticsExposure import (
     UeCommOrderCriterion,
     UeCommReq,
 )
-from app.schemas.analyticsExposureInternal import VectorEntry
+from app.schemas.analyticsExposureInternal import QueryResult, VectorQueryData
 from app.schemas.commonData import AnalyticsSubset
 
 logging.basicConfig(level=logging.INFO)
@@ -77,52 +75,46 @@ class UeCommHandler(AnalyticsHandler):
         self.app_ip_set = set(self.ip_app_map.keys())
 
     @override
-    def _get_event_metrics(self, catalog: QueryCatalog) -> list[Query]:
-        return [catalog.UE_UL_VOL_PER_FLOW_BYTES_QUERY, catalog.UE_DL_VOL_PER_FLOW_BYTES_QUERY]
+    def _set_event_queries(self) -> None:
+        catalog = self.driver.query_catalog
+        self.queries.extend([catalog.UE_UL_VOL_PER_FLOW_BYTES_QUERY, catalog.UE_DL_VOL_PER_FLOW_BYTES_QUERY])
 
     @override
-    def _prepare_queries(self) -> list[tuple[str, QueryType]]:
+    def set_built_queries(self) -> None:
         if not self.ip_app_map:
             logger.info("%s: No registered apps, skipping query preparation", self.analytics_id)
-            return []
+            return
 
-        catalog = self.driver.query_catalog
-
-        queries = []
-        for q, src_ips, dst_ips in [
-            (catalog.UE_UL_VOL_PER_FLOW_BYTES_QUERY, self.ue_ip_set, self.app_ip_set),  # UE → app (UL)
-            (catalog.UE_DL_VOL_PER_FLOW_BYTES_QUERY, self.app_ip_set, self.ue_ip_set),  # app → UE (DL)
-        ]:
+        builder = self.driver.QueryBuilderCls()
+        for q in self.queries:
             args = self.driver.QueryArgsCls(
-                raw_src_ips=src_ips, raw_dst_ips=dst_ips,
+                raw_app_ips=self.app_ip_set,
+                raw_ue_ips=self.ue_ip_set,
                 raw_interval=self.query_interval,
             )
-            queries.append((self.driver.query_builder.build_query(q, args), self.query_type))
+            builder.add(q, args)
 
-        return queries
+        self._built_queries = [(builder, self.query_type)]
 
     @override
-    def results_to_analytics_event_notif(self, results: list) -> AnalyticsEventNotif | None:
+    def results_to_analytics_event_notif(self, results: list[QueryResult | None]) -> AnalyticsEventNotif | None:
         ue_comm_infos = self._build_ue_comm_infos(results)
         if not ue_comm_infos:
             return None
         return AnalyticsEventNotif(
             analyEvent=AnalyticsEvent.ueComm,
-            timeStamp=datetime.now(timezone.utc),
+            timeStamp=self.query_end_ts,
             ueCommInfos=ue_comm_infos,
         )
 
     @override
-    def results_to_analytics_data(self, results: list) -> AnalyticsData | None:
+    def results_to_analytics_data(self, results: list[QueryResult | None]) -> AnalyticsData | None:
         ue_comm_infos = self._build_ue_comm_infos(results)
         if not ue_comm_infos:
             return None
         return AnalyticsData(ueCommInfos=ue_comm_infos, suppFeat="")
 
-    def _build_ue_comm_infos(self, results: list) -> list[UeCommunication] | None:
-        if not results:
-            logger.info("%s: empty query result", self.analytics_id)
-            return None
+    def _build_ue_comm_infos(self, results: list[QueryResult | None]) -> list[UeCommunication] | None:
 
         # Per-app, per-UE volumes { app_ip: { ue_ip: volume } } for UL and DL
         per_app_ue_ul_vol: defaultdict[str, defaultdict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -130,17 +122,42 @@ class UeCommHandler(AnalyticsHandler):
         # Store the original metric entries for building flow descriptions
         per_app_ue_ul_metrics: defaultdict[str, list[dict]] = defaultdict(list)
         per_app_ue_dl_metrics: defaultdict[str, list[dict]] = defaultdict(list)
-        # Populate to conform with the spec (not meaningful in the implementation)
-        comm_dur = int((self.query_end_ts - self.query_start_ts).total_seconds())
-        ts_start = self.query_start_ts
 
         catalog = self.driver.query_catalog
 
-        for r in results:
-            # logger.info("r %s", r)
-            if not isinstance(r, VectorEntry):
-                logger.error("%s: ignoring unexpected result entry type: %s", self.analytics_id, type(r))
-                continue
+        if len(results) != 1:
+            logger.warning("%s: expected 1 query result, got %d, skipping", self.analytics_id, len(results))
+            return None
+
+        query_result = results[0]
+        if query_result is None:
+            logger.error("%s: received None query result, skipping", self.analytics_id)
+            return None
+
+        data = query_result.data
+        if not isinstance(data, VectorQueryData):
+            logger.error("%s: ignoring unexpected result entry type: %s", self.analytics_id, type(data))
+            return None
+
+        if len(data.result) == 0:
+            # If no data is found on Prometheus then there was no traffic for the UEs / Apps in the whole timerange
+            return [
+                UeCommunication(
+                    commDur=int((self.query_end_ts - self.query_start_ts).total_seconds()),         # Not meaningful
+                    commDurVariance=0.0,                                                            # Not meaningful
+                    ts=self.query_start_ts,                                                         # Not meaningful
+                    trafChar=TrafficCharacterization(
+                        appId=app.app_id,
+                        ulVol=0,
+                        ulVolVariance=0,
+                        dlVol=0,
+                        dlVolVariance=0
+                    ),
+                    ratio=100
+                ) for app_ip, app in self.ip_app_map.items()
+            ]
+
+        for r in data.result:
 
             src_ip = r.metric.get('src_ip')
             dst_ip = r.metric.get('dst_ip')
@@ -164,41 +181,36 @@ class UeCommHandler(AnalyticsHandler):
             else:
                 logger.warning("%s: unexpected IPs in metric type %s", self.analytics_id, r.metric)
 
-        if not per_app_ue_ul_vol and not per_app_ue_dl_vol:
-            logger.info("%s: no UE communication data to report", self.analytics_id)
-            return None
-
         ue_comm_infos: list[UeCommunication] = []
-        active_app_ips = set(per_app_ue_ul_vol.keys()) | set(per_app_ue_dl_vol.keys())
         tgt_ue = (self.analytics_event_subsc or self.analytics_request).tgtUe
         is_group = bool(tgt_ue is not None and (tgt_ue.exterGroupId or tgt_ue.anyUeInd))
-        for app_ip in active_app_ips:
-            ul_vols = per_app_ue_ul_vol[app_ip].values()
-            dl_vols = per_app_ue_dl_vol[app_ip].values()
 
-            ul_metrics = per_app_ue_ul_metrics.get(app_ip, [])
-            dl_metrics = per_app_ue_dl_metrics.get(app_ip, [])
+        for app_ip, app in self.ip_app_map.items():
+            # defaultdicts
+            ul_vols = list(per_app_ue_ul_vol[app_ip].values())
+            dl_vols = list(per_app_ue_dl_vol[app_ip].values())
+            ul_metrics = per_app_ue_ul_metrics[app_ip]
+            dl_metrics = per_app_ue_dl_metrics[app_ip]
+
+            ul_vol_res, ul_vol_var_res = self._get_vol_stats(ul_vols)
+            dl_vol_res, dl_vol_var_res = self._get_vol_stats(dl_vols)
 
             ul_desc = self._build_flow_desc(ul_metrics, FlowDirection.uplink) if ul_metrics else None
             dl_desc = self._build_flow_desc(dl_metrics, FlowDirection.downlink) if dl_metrics else None
 
-            app = self.ip_app_map.get(app_ip)
             traffic_char = TrafficCharacterization(
-                appId=app.app_id if app else "",
+                appId=app.app_id,
                 fDescs=[d for d in [ul_desc, dl_desc] if d] or None,
-                ulVol=int(sum(ul_vols) / len(ul_vols)) if ul_vols else None,
-                dlVol=int(sum(dl_vols) / len(dl_vols)) if dl_vols else None,
-                ulVolVariance=population_variance(ul_vols),
-                dlVolVariance=population_variance(dl_vols),
+                ulVol=ul_vol_res,
+                dlVol=dl_vol_res,
+                ulVolVariance=ul_vol_var_res,
+                dlVolVariance=dl_vol_var_res,
             )
 
-            if not any([traffic_char.ulVol, traffic_char.dlVol, traffic_char.ulVolVariance, traffic_char.dlVolVariance]):
-                continue
-
             ue_comm = UeCommunication(
-                commDur=comm_dur,                       # Not meaningful in the implementation
-                commDurVariance=0.0,                    # Not meaningful in the implementation
-                ts=ts_start,                            # Not meaningful in the implementation
+                commDur=int((self.query_end_ts - self.query_start_ts).total_seconds()),             # Not meaningful
+                commDurVariance=0.0,                                                                # Not meaningful
+                ts=self.query_start_ts,                                                             # Not meaningful
                 trafChar=traffic_char,
             )
 
@@ -215,7 +227,7 @@ class UeCommHandler(AnalyticsHandler):
         return sorted_infos or None
 
     @staticmethod
-    def _build_flow_desc(metrics: list[dict], direction: FlowDirection) -> IpEthFlowDescription | None:
+    def _build_flow_desc(metrics: list[dict[str, str]], direction: FlowDirection) -> IpEthFlowDescription | None:
         if not metrics:
             return None
 
@@ -259,4 +271,9 @@ class UeCommHandler(AnalyticsHandler):
         if req.orderCriterion == UeCommOrderCriterion.duration:
             return sorted(infos, key=lambda c: c.commDur or 0, reverse=reverse)
         return infos
+
+    @staticmethod
+    def _get_vol_stats(volumes: list[float]) -> tuple[int, float | None]:
+        return (int(compute_mean(volumes)), population_variance(volumes)) if volumes else (0, 0.0)
+
 
