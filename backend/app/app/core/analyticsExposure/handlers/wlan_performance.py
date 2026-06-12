@@ -52,7 +52,6 @@ class WlanPerformanceHandler(AnalyticsHandler):
     _WLAN_UNSUPPORTED_SUBSETS: frozenset[AnalyticsSubset] = frozenset({
         AnalyticsSubset.rssi,
         AnalyticsSubset.rtt,
-        AnalyticsSubset.numberOfUes,
     })
 
     _METRIC_FIELD_MAP: dict[str, FieldMapping] = {

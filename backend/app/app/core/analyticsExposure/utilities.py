@@ -44,7 +44,7 @@ def get_subsc_ues(
             if tgt_ue.gpsi:
                 gpsi = tgt_ue.gpsi
                 if gpsi.startswith("msisdn-"):
-                    ue = crud_ue.get_supi(db, supi=gpsi.split("msisdn-")[1])
+                    ue = crud_ue.get_msisdn(db, msisdn=gpsi.split("msisdn-")[1])
                     if ue is not None:
                         user_equipments = [ue]
 

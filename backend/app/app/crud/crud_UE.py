@@ -55,10 +55,11 @@ class CRUD_UE(CRUDBase[UE, UECreate, UEUpdate]):
             .first()
         )
 
-    def get_msisdn(self, db: Session, *, msisdn: str, owner_id: int) -> Optional[UE]:
+    def get_msisdn(self, db: Session, *, msisdn: str, owner_id: int | None = None) -> Optional[UE]:
+        opt_owner_filter = ((UE.owner_id == owner_id,) if owner_id is not None else ())
         return (
             db.query(self.model)
-            .filter(UE.msisdn == msisdn, UE.owner_id == owner_id)
+            .filter(UE.msisdn == msisdn, *opt_owner_filter)
             .first()
         )
 
