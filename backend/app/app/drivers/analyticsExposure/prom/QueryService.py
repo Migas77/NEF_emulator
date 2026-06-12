@@ -14,6 +14,20 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
+"""
+NOTE ABOUT PROMETHEUS QUERIES
+Prometheus omits results for queries where it has no data for the base metric. This means that if
+no traffic was observed for a given UE or app in the queried time window, there will be no series
+for that UE/app in the query result (rather than a series with a default value of 0). This is true
+for all queries (even rate queries) if the underlying metric has no samples in the queried time window.
+
+Callers must decide if they should return zeroed default values to the user and handle this explicitly:
+- empty data.result list means no traffic for all apps/UEs in the whole timerange.
+- missing entry for a specific UE/app in data.result means no traffic for that UE/app in the whole timerange.
+- for the current catalog queries missing (ts, value) in matrix result means no traffic for that UE/app at that specific timestamp.
+"""
+
+
 class PromQueryService(QueryServiceInterface):
 
     def __init__(self, prometheus_url):
