@@ -117,11 +117,11 @@ async def update_ue(
 
     ue = crud.ue.update_coordinates(db=db, lat=latitude, long=longitude, db_obj=ue)
 
-    logging.info("The current cell is %d", cell_now)
-
     old_cell = ue.Cell.cell_id if ue.Cell is not None else None
     new_cell = cell_now.cell_id if cell_now is not None else None
     new_cell_id = cell_now.id if cell_now is not None else None
+
+    logging.info("The new cell id is %s", new_cell_id)
 
     # In case the UE gets step to a point in a path where is not covered by any cell, we set the initial_cell_id to the first cell it connects to again
     if ue.initial_cell_id is None:
