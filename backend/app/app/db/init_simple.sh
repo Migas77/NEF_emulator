@@ -545,7 +545,6 @@ printf 'Initializing Application (appIds) for admin...'
 printf '\n==================================================\n'
 
 # Used in AnalyticsExposure API via appIds
-# First Registered Application hardwired for calculating UL/DL in WLAN_PERFORMANCE (add new entries for other appIds)
 curl -X 'POST' \
   "${URL}:${PORT}/api/v1/applications" \
   -H 'accept: application/json' \
