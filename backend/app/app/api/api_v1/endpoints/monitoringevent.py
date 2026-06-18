@@ -212,7 +212,7 @@ async def create_subscription(
         )
     
     # TS129.122 - 5.3.2.4.5 Enumeration: LocationType
-    if item_in.maximumNumberOfReports > 1 and item_in.locationType == LocationType.LAST_KNOWN_LOCATION:
+    if isByMaxReports and item_in.maximumNumberOfReports > 1 and item_in.locationType == LocationType.LAST_KNOWN_LOCATION:
         http_response = JSONResponse(
             status_code=400,
             content="The LocationType LAST_KNOWN_LOCATION is only allowed for One-time requests."
@@ -220,7 +220,7 @@ async def create_subscription(
         return http_response
 
     # One time request
-    if item_in.maximumNumberOfReports == 1:
+    if isByMaxReports and item_in.maximumNumberOfReports == 1:
         reports = []
 
         for monType in allMonitoringTypes:
