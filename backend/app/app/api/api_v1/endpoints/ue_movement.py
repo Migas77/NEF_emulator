@@ -217,11 +217,10 @@ async def update_location(
 
 
 @router.post("/start-loop", status_code=200)
-def initiate_movement(
+async def initiate_movement(
     *,
     msg: Msg,
     current_user: models.User = Depends(deps.get_current_active_user),
-    background_tasks: BackgroundTasks,
 ) -> Any:
     """
     Start the loop.
@@ -232,8 +231,7 @@ def initiate_movement(
             detail=f"There is a thread already running for this supi:{msg.supi}",
         )
 
-    moving_devices[msg.supi] = current_user.id
-    background_tasks.add_task(movement_loop, msg.supi, current_user)
+    moving_devices[msg.supi] = asyncio.create_task(movement_loop(msg.supi, current_user))
 
     return {"msg": "Loop started"}
 
