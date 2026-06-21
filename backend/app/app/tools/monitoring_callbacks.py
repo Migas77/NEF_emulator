@@ -42,7 +42,7 @@ def update_maximum_reports(sub, id):
 
 async def handle_location_report_callback(location_reporting_sub, ue: UE, doc_id):
     logging.info(
-        "Attempting to send the callback to %d",
+        "Attempting to send the callback to %s",
         location_reporting_sub.get("notificationDestination"),
     )
 
