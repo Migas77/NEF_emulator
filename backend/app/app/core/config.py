@@ -44,6 +44,23 @@ class AnalyticsExposureInterfaceSettings(BaseModel):
         return v
 
 
+class SMSBackend(Enum):
+    MOCK = "mock"
+    SMSC = "smsc"
+
+
+class SMSInterfaceSettings(BaseModel):
+    backend: SMSBackend = SMSBackend.MOCK
+    smsc_url: str = ""
+    sender_id: str = ""
+
+    @validator("smsc_url", "sender_id", always=True)
+    def validate_smsc_set(cls, v, field, values):
+        if not v and values.get("backend") == SMSBackend.SMSC:
+            raise ValueError(f"{field.name} must be set when smsc SMS backend is in use")
+        return v
+
+
 class QoSInterfaceBackend(Enum):
     NOOP = "noop"
     HUWAEI = "huwaei"
@@ -161,6 +178,7 @@ class Settings(BaseSettings):
 
     qos: QoSInterfaceSettings = QoSInterfaceSettings()
     analyticsExposure: AnalyticsExposureInterfaceSettings = AnalyticsExposureInterfaceSettings()
+    sms: SMSInterfaceSettings = SMSInterfaceSettings()
 
     class Config:
         # case_sensitive = True

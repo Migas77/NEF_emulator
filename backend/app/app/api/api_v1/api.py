@@ -15,6 +15,7 @@ api_router.include_router(endpoints.UEGroups.router, prefix="/UEGroups", tags=["
 api_router.include_router(endpoints.UE.router, prefix="/UEs", tags=["UEs"])
 api_router.include_router(endpoints.qosInformation.router, prefix="/qosInfo", tags=["QoS Information"])
 api_router.include_router(endpoints.application.router, prefix="/applications", tags=["Applications"])
+api_router.include_router(endpoints.sms.router, prefix="/sms", tags=["SMS"])
 
 
     # ---Create a subapp---

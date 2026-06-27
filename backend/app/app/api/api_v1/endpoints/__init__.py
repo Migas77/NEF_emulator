@@ -23,3 +23,4 @@ from .broker import router
 from .tests import router
 from .scenario import router
 from .application import router
+from .sms import router
