@@ -51,3 +51,32 @@ MONGO_EXPRESS_ENABLE_ADMIN=true
 
 #Report
 REPORT_PATH=../shared/report.json
+
+# CAPIF
+
+# Compose Networking
+# CAPIF_ENABLED only works for NEF endpoints
+# CAPIF_ENABLED=true  [NEF jwt disabled] => crt conditions: missing(403); invalid(400) 
+# CAPIF_ENABLED=false [NEF jwt enabled]  => crt conditions: ignores certs
+CAPIF_ENABLED=false
+CAPIF_CLEANUP_ON_SHUTDOWN=false
+EXTERNAL_NET=false
+
+# NGINX (important for CAPIF integration)
+# If you want use DOMAIN_NAME in k8s service description files turn set PRODUCTION to true and specify the DOMAIN_NAME variable
+# PRODUCTION=true  => uses DOMAIN_NAME (e.g. nefemu.example.com)
+# PRODUCTION=false => uses "https://${NGINX_HOST}:${NGINX_HTTPS}" (e.g. https://10.130.213.240:443)
+PRODUCTION=true
+DOMAIN_NAME=nefemu.com
+NGINX_HOST=192.168.0.180
+NGINX_HTTP=8080
+NGINX_HTTPS=443
+
+# OpenCAPIF SDK
+CAPIF_HOST=capifcore
+REGISTER_HOST=capifcore
+CAPIF_HTTPS_PORT=443
+CAPIF_REGISTER_PORT=8084
+CAPIF_USERNAME=nef_provider
+CAPIF_PASSWORD=password
+DEBUG_MODE=true

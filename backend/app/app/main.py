@@ -1,7 +1,10 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from starlette.middleware.cors import CORSMiddleware
 from app.api.api_v1.api import api_router, nef_router, tests_router
+from app.api.deps import verify_with_capif_public_key_if_enabled
 from app.api.exception_handlers import problem_details_http_handler
+from app.capif.logging import CAPIFLoggingMiddleware
+from app.capif.provider import capif_provider
 from app.core.config import settings
 import time
 
@@ -25,12 +28,15 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
+if settings.CAPIF_ENABLED:
+    app.add_middleware(CAPIFLoggingMiddleware)
+
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # ================================= Sub Application - Northbound APIs =================================
 
-nefapi = FastAPI(title="Northbound APIs")
+nefapi = FastAPI(title="Northbound APIs", dependencies=[Depends(verify_with_capif_public_key_if_enabled)])
 nefapi.include_router(nef_router, prefix=settings.API_V1_STR)
 nefapi.add_exception_handler(HTTPException, problem_details_http_handler)
 app.mount("/nef", nefapi)
@@ -47,6 +53,10 @@ async def add_process_time_header(request: Request, call_next):
 # propagate startup events upwards
 for startup_event in nef_router.on_startup:
     app.add_event_handler("startup", startup_event)
+
+if settings.CAPIF_ENABLED:
+    app.add_event_handler("startup", lambda: capif_provider.startup(nefapi, "/nef"))
+    app.add_event_handler("shutdown", capif_provider.shutdown)
 
 # ================================= Sub Application - Northbound APIs =================================
 

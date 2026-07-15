@@ -139,9 +139,35 @@ class Settings(BaseSettings):
         )
 
     # MONGO_CLIENT: str
-    # CAPIF_HOST: str
-    # CAPIF_HTTP_PORT: str
-    # CAPIF_HTTPS_PORT: str
+
+    NGINX_HOST: str
+    NGINX_HTTPS: str
+
+    # CAPIF settings (required when CAPIF_ENABLED=True)
+    CAPIF_ENABLED: bool = False
+    CAPIF_CLEANUP_ON_SHUTDOWN: bool = False
+    CAPIF_HOST: Optional[str] = None
+    REGISTER_HOST: Optional[str] = None
+    CAPIF_HTTPS_PORT: Optional[str] = None
+    CAPIF_REGISTER_PORT: Optional[str] = None
+    CAPIF_USERNAME: Optional[str] = None
+    CAPIF_PASSWORD: Optional[str] = None
+
+    @validator(
+        "CAPIF_HOST",
+        "REGISTER_HOST",
+        "CAPIF_HTTPS_PORT",
+        "CAPIF_REGISTER_PORT",
+        "CAPIF_USERNAME",
+        "CAPIF_PASSWORD",
+        always=True,
+    )
+    def validate_capif_settings(cls, v, field, values):
+        if not v and values.get("CAPIF_ENABLED"):
+            raise ValueError(
+                f"{field.name} must be set when CAPIF_ENABLED is true"
+            )
+        return v
 
     SMTP_TLS: bool = True
     SMTP_PORT: Optional[int] = None

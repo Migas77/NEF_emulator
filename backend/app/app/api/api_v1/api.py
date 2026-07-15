@@ -3,6 +3,11 @@ from fastapi import APIRouter
 from app.api.api_v1 import endpoints
 
 api_router = APIRouter()
+
+@api_router.get("/health", tags=["Health"])
+async def health_check():
+    return {"status": "ok"}
+
 api_router.include_router(endpoints.login.router, tags=["login"])
 api_router.include_router(endpoints.users.router, prefix="/users", tags=["users"])
 api_router.include_router(endpoints.utils.router, prefix="/utils", tags=["UI"])

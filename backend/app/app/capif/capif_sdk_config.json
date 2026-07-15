@@ -1,0 +1,75 @@
+{
+  "capif_host": "",
+  "register_host": "",
+  "capif_https_port": "",
+  "capif_register_port": "",
+  "capif_username": "",
+  "capif_password": "",
+  "debug_mode": "",
+  "invoker": {
+    "invoker_folder": "",
+    "capif_callback_url": "",
+    "supported_features":"",
+    "check_authentication_data":{
+      "ip":"",
+      "port":""
+    },
+    "cert_generation": {
+      "csr_common_name": "apfExpapfoser1502",
+      "csr_organizational_unit": "test_app_ou",
+      "csr_organization": "test_app_o",
+      "csr_locality": "Madrid",
+      "csr_state_or_province_name": "Madrid",
+      "csr_country_name": "ES",
+      "csr_email_address": "test@example.com"
+    },
+    "discover_filter": {
+      "api-name": "",
+      "api-version": "",
+      "comm-type": "",
+      "protocol": "",
+      "aef-id": "",
+      "data-format": "",
+      "api-cat": "",
+      "preferred-aef-loc": "",
+      "req-api-prov-name": "",
+      "supported-features": "",
+      "api-supported-features": "",
+      "ue-ip-addr": "",
+      "service-kpis": ""
+    }
+  },
+  "provider": {
+    "provider_folder": "app/capif/certificates",
+    "supported_features": "",
+    "apfs": "1",
+    "aefs": "1",
+    "publish_req": {
+      "service_api_id": "",
+      "publisher_apf_id": "",
+      "publisher_aefs_ids": [
+        "",
+        ""
+      ]
+    },
+    "cert_generation": {
+      "csr_common_name": "apfExpapfoser1502",
+      "csr_organizational_unit": "test_app_ou",
+      "csr_organization": "test_app_o",
+      "csr_locality": "Madrid",
+      "csr_state_or_province_name": "Madrid",
+      "csr_country_name": "ES",
+      "csr_email_address": "test@example.com"
+    },
+    "api_description_path": "",
+    "log":{            
+      "apiName": "api",
+      "apiVersion": "",
+      "resourceName": "",
+      "uri": "",
+      "protocol": "",
+      "operation": "",
+      "result": ""
+    }
+   }
+}
