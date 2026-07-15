@@ -21,7 +21,7 @@ spec:
         - -c
         - >
           set -x;
-          while [ $(curl -sw '%{http_code}' "http://{{ .Release.Name }}-{{ .Values.backend.name }}:{{ index .Values.backend.service.ports 0 "port" }}/login" -o /dev/null) -ne 200 ]; do
+          while [ $(curl -sw '%{http_code}' "http://{{ .Release.Name }}-{{ .Values.backend.name }}:{{ index .Values.backend.service.ports 0 "port" }}/api/v1/health" -o /dev/null) -ne 200 ]; do
             sleep 2;
           done;
       containers:

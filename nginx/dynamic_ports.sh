@@ -2,6 +2,11 @@
 
 echo "CAPIF_ENABLED: ${CAPIF_ENABLED}"
 
+# Defaults match the docker-compose service name/port; Kubernetes overrides
+# these via the release-prefixed backend Service name/port (see helm-chart).
+export NGINX_BACKEND_HOST="${NGINX_BACKEND_HOST:-backend}"
+export NGINX_BACKEND_PORT="${NGINX_BACKEND_PORT:-80}"
+
 if [ "${CAPIF_ENABLED}" = "true" ]; then
     : "${CAPIF_USERNAME:?ERROR: CAPIF_USERNAME is not set}"
     

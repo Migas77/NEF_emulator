@@ -1,0 +1,14 @@
+{{- if .Values.nginx.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-{{ .Values.nginx.name }}
+spec:
+  type: {{ .Values.nginx.service.type }}
+  {{- if .Values.nginx.service.ports }}
+  ports:
+    {{- toYaml .Values.nginx.service.ports | nindent 4 }}
+  {{- end }}
+  selector:
+    app: {{ .Release.Name }}-{{ .Values.nginx.name }}
+{{- end }}

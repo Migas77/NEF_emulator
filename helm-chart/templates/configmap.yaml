@@ -24,6 +24,26 @@ data:
   SENTRY_DSN: ""
   USERS_OPEN_REGISTRATION: "true"
 
+  # NGINX (important for CAPIF integration)
+  NGINX_HOST: "10.255.28.207"  # TO BE REMOVED LATER
+  NGINX_HTTP: '{{ index .Values.nginx.service.ports 0 "port" }}'
+  NGINX_HTTPS: '{{ index .Values.nginx.service.ports 1 "port" }}'
+  # nginx proxy_pass target: the backend's Service name/port (not the
+  # container port), since nginx talks to the backend through its Service.
+  NGINX_BACKEND_HOST: {{ .Release.Name }}-{{ .Values.backend.name }}
+  NGINX_BACKEND_PORT: '{{ index .Values.backend.service.ports 0 "port" }}'
+
+  # CAPIF
+  CAPIF_ENABLED: {{ .Values.capif.enabled | quote }}
+  CAPIF_CLEANUP_ON_SHUTDOWN: {{ .Values.capif.cleanupOnShutdown | quote }}
+  {{- if .Values.capif.enabled }}
+  CAPIF_HOST: {{ .Values.capif.host | quote }}
+  REGISTER_HOST: {{ .Values.capif.registerHost | quote }}
+  CAPIF_HTTPS_PORT: {{ .Values.capif.httpsPort | quote }}
+  CAPIF_REGISTER_PORT: {{ .Values.capif.registerPort | quote }}
+  CAPIF_USERNAME: {{ .Values.capif.username | quote }}
+  {{- end }}
+
   # Postgres
   # info: POSTGRES_USER value ('postgres') is hard-coded in /pgadmin/servers.json
   POSTGRES_SERVER: {{ .Release.Name }}-{{ .Values.postgres.name }}

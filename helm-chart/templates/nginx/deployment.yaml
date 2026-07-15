@@ -1,0 +1,86 @@
+{{- if .Values.nginx.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-{{ .Values.nginx.name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-{{ .Values.nginx.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-{{ .Values.nginx.name }}
+    spec:
+      {{- if .Values.capif.enabled }}
+      {{- with .Values.capif.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.capif.enabled }}
+      initContainers:
+      # The backend generates its CAPIF onboarding certs asynchronously at
+      # startup (they don't exist yet when this pod is first scheduled), so
+      # nginx must wait for them to land on the shared hostPath before it
+      # starts - otherwise the ssl_certificate directives below fail to load.
+      - name: wait-for-capif-certs
+        image: busybox
+        env:
+        - name: CAPIF_USERNAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ .Release.Name }}-{{ .Values.configName }}
+              key: CAPIF_USERNAME
+        command: [ 'sh', '-c' ]
+        args:
+        - >
+          CERT_DIR="/etc/nginx/provider-certs/$CAPIF_USERNAME";
+          TIMEOUT=600;
+          ELAPSED=0;
+          until [ -f "$CERT_DIR/aef-1.crt" ] && [ -f "$CERT_DIR/AEF-1_private_key.key" ] && [ -f "$CERT_DIR/ca.crt" ]; do
+            if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+              echo "Timed out after ${TIMEOUT}s waiting for CAPIF certs in $CERT_DIR" >&2;
+              exit 1;
+            fi;
+            echo "Waiting for CAPIF certs in $CERT_DIR ...";
+            sleep 5;
+            ELAPSED=$((ELAPSED + 5));
+          done;
+          echo "CAPIF certs found in $CERT_DIR";
+        volumeMounts:
+        - name: capif-certs
+          mountPath: /etc/nginx/provider-certs
+          readOnly: true
+      {{- end }}
+      containers:
+      - name: {{ .Values.nginx.name }}
+        image: {{ .Values.nginx.deployment.image }}
+        command: [ "sh", "-c", "/self-signed-crt.sh && /dynamic_ports.sh" ]
+        {{- if .Values.nginx.deployment.ports }}
+        ports:
+          {{- toYaml .Values.nginx.deployment.ports | nindent 12 }}
+        {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ .Release.Name }}-{{ .Values.secretsName }}
+        - configMapRef:
+            name: {{ .Release.Name }}-{{ .Values.configName }}
+        volumeMounts:
+        - name: nginx-certs
+          mountPath: /etc/nginx/certs
+        {{- if .Values.capif.enabled }}
+        - name: capif-certs
+          mountPath: /etc/nginx/provider-certs
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: nginx-certs
+        emptyDir: {}
+      {{- if .Values.capif.enabled }}
+      - name: capif-certs
+        hostPath:
+          path: {{ .Values.capif.hostPath }}
+          type: DirectoryOrCreate
+      {{- end }}
+{{- end }}

@@ -32,11 +32,8 @@ done
 
 kubectl create namespace $NAMESPACE
 
-docker build -t $DOCKER_REGISTRY/backend -f backend/Dockerfile.backend --build-arg INSTALL_DEV=${INSTALL_DEV:-true} --build-arg INSTALL_JUPYTER=${INSTALL_JUPYTER:-true} backend
-docker push $DOCKER_REGISTRY/backend
-docker build -t $DOCKER_REGISTRY/report -f backend/Dockerfile.report --build-arg INSTALL_DEV=${INSTALL_DEV:-true} --build-arg INSTALL_JUPYTER=${INSTALL_JUPYTER:-true} backend
-docker push $DOCKER_REGISTRY/report
-helm -n $NAMESPACE upgrade --wait --install $RELEASE helm-chart --set backend.deployment.image=$DOCKER_REGISTRY/backend:latest --set report.deployment.image=$DOCKER_REGISTRY/report:latest
+bash run-docker-build.sh -d $DOCKER_REGISTRY
+helm -n $NAMESPACE upgrade --wait --install $RELEASE helm-chart --set backend.deployment.image=$DOCKER_REGISTRY/backend:latest --set report.deployment.image=$DOCKER_REGISTRY/report:latest --set nginx.deployment.image=$DOCKER_REGISTRY/nginx-nef:latest
 
 # get the external IP address of the service nef-backend if it exists, otherwise the cluster IP
 NEF_BACKEND_IP=$(kubectl get svc $RELEASE-backend -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].ip}')

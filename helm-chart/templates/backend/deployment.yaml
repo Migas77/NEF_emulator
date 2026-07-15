@@ -12,11 +12,31 @@ spec:
       labels:
         app: {{ .Release.Name }}-{{ .Values.backend.name }}
     spec:
+      hostAliases:                # TO BE REMOVED LATER
+      - ip: "10.255.28.183"       # TO BE REMOVED LATER
+        hostnames:                # TO BE REMOVED LATER
+        - "capifcore"             # TO BE REMOVED LATER
+      {{- if .Values.capif.enabled }}
+      {{- with .Values.capif.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       # depends on rabbitmq
       initContainers:
       - name: wait-for-rabbitmq
         image: busybox
         command: [ 'sh', '-c', 'until wget http://guest:guest@{{ .Release.Name }}-{{ .Values.rabbitmq.name }}.{{ .Release.Namespace }}.svc.cluster.local:{{ index .Values.rabbitmq.service.ports 1 "port" }}/api/aliveness-test/%2F; do echo waiting for rabbitmq; sleep 2; done;' ]
+      {{- if .Values.capif.enabled }}
+      # Populates/prepares the shared hostPath directory (permissions) before
+      # the backend writes its CAPIF onboarding certs into it at startup.
+      - name: prepare-capif-certs-dir
+        image: busybox
+        command: [ 'sh', '-c', 'mkdir -p /capif-certs && chmod -R 0777 /capif-certs' ]
+        volumeMounts:
+        - name: capif-certs
+          mountPath: /capif-certs
+      {{- end }}
       containers:
       - name: {{ .Values.backend.name }}
         image: {{ .Values.backend.deployment.image }}
@@ -30,6 +50,10 @@ spec:
           #   mountPath: /app
           - name: shared-data
             mountPath: /shared
+          {{- if .Values.capif.enabled }}
+          - name: capif-certs
+            mountPath: /app/app/capif/certificates
+          {{- end }}
         env:
           - name: SERVER_NAME
             valueFrom:
@@ -54,4 +78,10 @@ spec:
         - name: shared-data
           persistentVolumeClaim:
             claimName: shared-data
+        {{- if .Values.capif.enabled }}
+        - name: capif-certs
+          hostPath:
+            path: {{ .Values.capif.hostPath }}
+            type: DirectoryOrCreate
+        {{- end }}
 {{- end }}

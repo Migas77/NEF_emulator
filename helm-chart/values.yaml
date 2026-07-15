@@ -87,7 +87,7 @@ report:
   enabled: true
   name: report
   deployment:
-    image: localhost:5000/report:latest
+    image: ghcr.io/migas77/report:latest
     ports:
       - containerPort: 3000
   service:
@@ -102,7 +102,7 @@ backend:
   enabled: true
   name: backend
   deployment:
-    image: localhost:5000/backend:latest
+    image: ghcr.io/migas77/backend:latest
     ports:
       - containerPort: 80
   service:
@@ -111,3 +111,48 @@ backend:
       - port: 8888
         targetPort: 80
         protocol: TCP
+
+# Nginx reverse proxy (TLS termination + mTLS client-cert check required by CAPIF)
+nginx:
+  enabled: true
+  name: nginx
+  deployment:
+    image: ghcr.io/migas77/nginx-nef:latest
+    ports:
+      - containerPort: 80
+      - containerPort: 443
+  service:
+    type: LoadBalancer
+    ports:
+      - name: http
+        port: 8080
+        targetPort: 80
+        protocol: TCP
+      - name: https
+        port: 443
+        targetPort: 443
+        protocol: TCP
+
+# CAPIF integration.
+# The backend generates its onboarding certificates at runtime under
+# app/capif/certificates/<CAPIF_USERNAME>/ and nginx needs those same files
+# to terminate TLS/mTLS. Since there's no shared filesystem across nodes by
+# default, certs are shared via a hostPath volume - which means every pod
+# that mounts it (nginx + all backend replicas) MUST land on the same node.
+# Set capif.nodeSelector to pin them there (e.g. a single-node/dev cluster).
+capif:
+  enabled: true
+  # Offboard + unpublish from CAPIF core on pod shutdown (SIGTERM), e.g. on
+  # helm uninstall/rollout - so CAPIF core doesn't accumulate stale
+  # registrations across reinstalls (see the "Already registered service
+  # with same api name" 403 this caused before).
+  cleanupOnShutdown: true
+  hostPath: /mnt/nef-capif-certs
+  nodeSelector: {}
+  host: capifcore
+  registerHost: capifcore
+  httpsPort: "443"
+  registerPort: "8084"
+  username: nef_provider
+  # password should be overridden with --set capif.password=... or a values override file, not committed here
+  password: password
