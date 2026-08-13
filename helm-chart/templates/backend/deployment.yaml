@@ -12,10 +12,15 @@ spec:
       labels:
         app: {{ .Release.Name }}-{{ .Values.backend.name }}
     spec:
-      hostAliases:                # TO BE REMOVED LATER
-      - ip: "10.255.28.183"       # TO BE REMOVED LATER
-        hostnames:                # TO BE REMOVED LATER
-        - "capifcore"             # TO BE REMOVED LATER
+      # capif.host is the hostname CAPIF's nginx serves its cert for, and it is
+      # not resolvable by anything (no DNS zone, not a Service name) - map it
+      # to capif.ingressIP here, as CAPIF itself does for its register pod.
+      {{- if and .Values.capif.enabled .Values.capif.ingressIP }}
+      hostAliases:
+      - ip: {{ .Values.capif.ingressIP | quote }}
+        hostnames:
+        - {{ .Values.capif.host | quote }}
+      {{- end }}
       {{- if .Values.capif.enabled }}
       {{- with .Values.capif.nodeSelector }}
       nodeSelector:

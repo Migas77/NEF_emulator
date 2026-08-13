@@ -149,8 +149,25 @@ capif:
   cleanupOnShutdown: true
   hostPath: /mnt/nef-capif-certs
   nodeSelector: {}
-  host: capifcore
-  registerHost: capifcore
+  # capif.host MUST stay the hostname CAPIF's nginx serves its cert for
+  # (CAPIF_HOSTNAME in capif/helm/scripts/variables.sh): the SDK verifies every
+  # call after onboarding against the downloaded ca.crt, which checks this
+  # hostname against the cert SAN - a *.svc.cluster.local name fails there.
+  # Nothing resolves that name (it's only in the Ingress rule and the cert), so
+  # it is mapped to an address via the backend's hostAliases - see ingressIP.
+  host: capif.testbed.develop
+  # registerHost needs no alias: the SDK reaches register on its ClusterIP
+  # service port (8084, not via the ingress) and calls getauth with
+  # verify=False, so plain cluster DNS is enough here.
+  registerHost: register.ocf-capif.svc.cluster.local
+  # Address capif.host resolves to, injected as a hostAlias on the backend pod
+  # (this is what capif/helm/scripts/05_install_capif_register.sh does for
+  # CAPIF's own register pod). Use the ingress-nginx controller ClusterIP -
+  # it lives outside the ocf-capif namespace and so survives CAPIF reinstalls:
+  #   kubectl get svc -A | awk '/ingress-nginx-controller/ {print $4; exit}'
+  # Left empty the hostAliases block is omitted entirely and onboarding fails
+  # with "Name or service not known".
+  ingressIP: "10.43.81.164"
   httpsPort: "443"
   registerPort: "8084"
   username: nef_provider
