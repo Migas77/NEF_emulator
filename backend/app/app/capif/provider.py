@@ -57,6 +57,12 @@ class CapifProvider:
         self.provider.api_description_path=f"./{self.api_name}.json"
         self.__publish_services()
 
+        # capif_logging_feature reads provider_service_ids.json, so it can only be built
+        # after publishing. Without this it is only set on the already onboarded branch
+        # above, leaving it None for the whole life of the process that onboards for the
+        # first time - and with it, no invocation logging to CAPIF until a restart.
+        self.logging_feature = opencapif_sdk.capif_logging_feature(config_file=self.config_path)
+
 
     def shutdown(self):
         logging.info("Shutting down CAPIF provider...")

@@ -28,10 +28,6 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_headers=["*"],
     )
 
-if settings.CAPIF_ENABLED:
-    app.add_middleware(CAPIFLoggingMiddleware)
-
-
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # ================================= Sub Application - Northbound APIs =================================
@@ -39,6 +35,12 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 nefapi = FastAPI(title="Northbound APIs", dependencies=[Depends(verify_with_capif_public_key_if_enabled)])
 nefapi.include_router(nef_router, prefix=settings.API_V1_STR)
 nefapi.add_exception_handler(HTTPException, problem_details_http_handler)
+
+# Only the northbound APIs are published to CAPIF, so only their invocations can
+# be logged there - and only they carry a CAPIF-issued token.
+if settings.CAPIF_ENABLED:
+    nefapi.add_middleware(CAPIFLoggingMiddleware)
+
 app.mount("/nef", nefapi)
 
 #Middleware - add a custom header X-Process-Time containing the time in seconds that it took to process the request and generate a response

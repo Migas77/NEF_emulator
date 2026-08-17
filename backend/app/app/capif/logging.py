@@ -80,6 +80,7 @@ def log_to_capif(log_entry: dict, jwt):
     logging_feature = capif_provider.logging_feature
     if logging_feature is None:
         logging.error("CAPIF logging feature is not initialized but CAPIF_ENABLED is true.")
+        return
 
     # Populate the log entry with the required information
     log_entry = {

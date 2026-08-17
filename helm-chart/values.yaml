@@ -100,6 +100,7 @@ report:
 # Backend configuration
 backend:
   enabled: true
+  password: pass
   name: backend
   deployment:
     image: ghcr.io/migas77/backend:latest

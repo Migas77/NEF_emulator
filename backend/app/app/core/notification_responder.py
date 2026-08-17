@@ -16,6 +16,7 @@ class NotificationResponder:
         Returns the new notification destination if a permanent redirect was encountered
         """
         next_destination = notificationDestination
+        print("NEXT DESTINATION", next_destination)
         permanent_redirect = None
 
         if isinstance(json, BaseModel):

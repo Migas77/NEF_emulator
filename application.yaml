@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nef-emulator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: oci://ghcr.io/migas77/nef-emulator
+    chart: nef-emulator
+    targetRevision: "0.0.4"
+    helm:
+      parameters:
+        - name: backend.deployment.image
+          value: "ghcr.io/migas77/backend:0.0.2"
+        - name: capif.enabled
+          value: "%s"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nef
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
